@@ -1,0 +1,355 @@
+syntax = "proto3";
+
+option go_package = "./services;services";
+
+package lottery;
+
+import "base.proto";
+
+
+service LotteryService {
+
+    //获取水池数据
+    rpc PoolAmountResult(PoolAmountResultReq) returns (PoolAmountResultResp);
+
+    //slots
+
+    //Lottery
+    rpc SlotsLottery (SlotsLotteryReq) returns (SlotsLotteryResp);
+
+    //qkl
+
+    /**
+   * 初始化下注
+   *
+   * 流程：
+   * 1. 扣除用户余额
+   * 2. 保存游戏状态到 Redis（extra 中包含 initialBet）
+   */
+    rpc QKLDoBetInit(QKLDoBetInitReq) returns (QKLDoBetInitResp);    
+    /**
+   * 加注
+   *
+   * 流程：
+   * 1. 从 pool 扣除 bet 金额（加注）
+   * 2. 扣除用户余额
+   * 3. 保存游戏状态到 Redis（extra 中包含 initialBet）
+   *
+   * 与 doBetInit 逻辑相同，只是用于区分不同的业务场景
+   */
+    rpc QKLDoBetMore(QKLDoBetMoreReq) returns (QKLDoBetMoreResp);
+    /**
+   * 继续下注检查
+   *
+   * 流程：
+   * 1. 检查 pool 是否有足够资金赔付 deltaWin, 多次win的，deltaWin = lastWin - previousWin
+   * 2. 返回是否可以赔付
+   *
+   */
+    rpc QKLDoBetContinue(QKLDoBetContinueReq) returns (QKLDoBetContinueResp);
+
+    /**
+   * 结算
+   *
+   * 流程：
+   * - 如果 hit=true（玩家赢了）：
+   *   返还 win 到用户余额
+   *
+   * - 如果 hit=false（玩家输了）：
+   *   1. 将之前从 pool 扣除的 bet 返回到 pool
+   *   2. 不返还任何金额到用户余额
+   *
+   *  结算，可能不需要 result 和extra 的持久化，可以 传入 null undefined 或者不传入
+   */
+    rpc QKLDoBetSettle(QKLDoBetSettleReq) returns (QKLDoBetSettleResp);
+
+    /**
+   * 结算前检查并结算（支持平局）
+   *
+   * 流程：
+   * 1. 只有 win 时才检查 pool 是否足够，够则扣除（lose 不需要，draw 直接扣除）
+   * 2. 如果 pool 不足，返回错误
+   * 3. 根据输赢进行结算：
+   *    - hit='win': 返还 win 到用户余额（win 已包含 initBet，pool 已扣除）
+   *    - hit='lose': 不返还用户，pool 也不变动
+   *    - hit='draw': 返还 initBet 到用户余额，从 pool 扣除 initBet（不检查 pool 是否够）
+   */
+    rpc QKLDoBetSettleWithCheck(QKLDoBetSettleWithCheckReq) returns (QKLDoBetSettleWithCheckResp);
+
+    /**
+   * 终止游戏，没有没赢，返回初始下注金额
+   * 流程：
+   * 1. 将下注金额返还给用户（相当于没玩）
+   * 2. 不记录游戏结果
+   */
+    rpc QKLDoBetStop(QKLDoBetStopReq) returns (QKLDoBetStopResp);
+
+    /**
+   * 一次性行下注
+   */
+    rpc QKLDoBet(QKLDoBetReq) returns (QKLDoBetResp);
+
+    /**
+   * 多人游戏下注 - 开发环境（包含 recordId）
+   */
+    rpc QKLDoBetMultiplayerGame(QKLDoBetMultiplayerGameReq) returns (QKLDoBetMultiplayerGameResp);
+
+    /**
+   * 多人游戏取消下注 - 开发环境
+   */
+    rpc QKLCancelBetMultiplayerGame(QKLCancelBetMultiplayerGameReq) returns (QKLCancelBetMultiplayerGameResp);
+
+    /**
+   * 百人游戏提现/赢钱 - 开发环境
+   *
+   * 流程：
+   * 1. 从 pool 扣除 win 金额
+   * 2. 返还 win 到用户余额
+   */
+    rpc QKLDoMultiplayerCashout(QKLDoMultiplayerCashoutReq) returns (QKLDoMultiplayerCashoutResp);
+
+    /**
+   * 保存多人游戏记录 - 开发环境（空实现）
+   */
+    rpc QKLSaveMultiplayerRecords(QKLSaveMultiplayerRecordsReq) returns (QKLSaveMultiplayerRecordsResp);
+
+    /**
+   * 百人游戏结算 - 开发环境
+   *
+   * 流程：
+   * 1. 遍历 dispatchRewardGold 为正的 GameRecord 数组
+   * 2. 累计 totalwin，从 pool 扣除
+   * 3. 根据 userId，设置用户的金币 win
+   * 4. 生成环境还需要记录结算结果到数据库，开发环境不处理
+   */
+    rpc QKLSettleMultiplayer(QKLSettleMultiplayerReq) returns (QKLSettleMultiplayerResp);
+}
+
+message PoolAmountResultReq {
+    uint32 agentId = 1;
+    uint32 gameId  = 2;
+    string currencyType = 4;
+}
+
+message PoolAmountResultResp {
+    base.error_code code = 1;
+    string currency = 2;
+}
+
+message QKLSettleMultiplayerReq {
+    repeated QKLRecord records = 1;
+    string   totalWin = 2;
+}
+
+message QKLNewCurrencyItem {
+    uint32 userId   = 1;
+    string currency = 2;
+}
+
+message QKLSettleMultiplayerResp {
+    base.error_code code = 1;
+    repeated QKLNewCurrencyItem currencys      = 2;
+}
+
+message QKLRecord {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string win      = 3;
+    string roundID  = 4;
+    string log      = 5;
+    string bet      = 6;
+    int64  playDate = 7;
+    string currencyType = 9;
+    uint32 agentId = 10;
+    string account = 11;
+}
+
+message QKLSaveMultiplayerRecordsReq {
+    repeated QKLRecord records = 1;
+}
+
+message QKLSaveMultiplayerRecordsResp {
+    base.error_code code = 1;
+    repeated QKLNewCurrencyItem currencys      = 2;
+}
+
+message QKLDoMultiplayerCashoutReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string win      = 3;
+    string roundID  = 4;
+    bool   complete = 8; //区块链 只要是结算 默认是true
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLDoMultiplayerCashoutResp {
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message QKLCancelBetMultiplayerGameReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string bet      = 3;
+    string roundID  = 4;
+    uint32 areaId   = 5;
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLCancelBetMultiplayerGameResp {
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message QKLDoBetMultiplayerGameReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string roundID  = 4;
+    uint32 areaId   = 5;
+    string initBet  = 9;
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLDoBetMultiplayerGameResp {
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message QKLDoBetReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string win      = 3;
+    string roundID  = 4;
+    string result   = 7;
+    bool   complete = 8; //区块链 只要是结算 默认是true
+    string bet      = 10;
+    uint32 agentId =  11;
+    string currencyType = 12;
+}
+
+message QKLDoBetResp {
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message QKLDoBetStopReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string roundID  = 4;
+    string initBet  = 9;
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLDoBetStopResp {
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message QKLDoBetSettleWithCheckReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string win      = 3;
+    string roundID  = 4;
+    string hit      = 6;
+    string result   = 7;
+    bool   complete = 8; //区块链 只要是结算 默认是true
+    string initBet  = 9;
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLDoBetSettleWithCheckResp {
+    base.error_code code = 1;
+    string currency      = 2;
+    bool canAfford       = 3;
+}
+
+message QKLDoBetSettleReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string win      = 3;
+    string roundID  = 4;
+    bool   hit      = 6;
+    string result   = 7;
+    string totalBet = 8;
+    bool   complete = 9; //区块链 只要是结算 默认是true
+    uint32 agentId = 10;
+    string currencyType = 11;
+    bool   guaranteedWin = 12;
+}
+
+message QKLDoBetSettleResp {
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message QKLDoBetMoreReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string bet      = 3;
+    string roundID  = 4;
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLDoBetMoreResp {
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message QKLDoBetContinueReq {
+    uint32 userId           = 1;
+    uint32 gameId           = 2;
+    string roundID          = 4;
+    bool   guaranteedWin    = 6;
+    string deltaWin         = 7;
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLDoBetContinueResp {
+    base.error_code code = 1;
+    bool canAfford       = 2;
+}
+
+message QKLDoBetInitReq {
+    uint32 userId   = 1;
+    uint32 gameId   = 2;
+    string bet      = 3;
+    string roundID  = 4;
+    uint32 agentId = 10;
+    string currencyType = 11;
+}
+
+message QKLDoBetInitResp{
+    base.error_code code = 1;
+    string currency      = 2;
+}
+
+message SlotsLotteryReq {
+    uint32 playerId = 1;
+    string currencyType = 5;
+	int64  agentId = 6;
+    uint32 gameId = 7;
+    string profitLoss = 8;      //开奖
+    string bet = 9;             //下注
+    string state = 10;          //状态
+    string token = 11;          //token
+    string roundID = 12;        //局号 --下注时使用
+    string maxProfitLoss = 13;  //最大赔付
+    bool   complete = 14;       //注单是否结束
+    string account = 15;        //三方平台账号
+}
+
+message SlotsLotteryResp {
+    //玩家最新的金币数
+    string newCurrency = 1;
+    bool result = 2;
+    //当前可赔付值
+    string pay = 3;
+    base.error_code code = 4;
+}

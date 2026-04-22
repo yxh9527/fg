@@ -1,0 +1,41 @@
+安装及运行方法：
+    1.配置Node.js运行环境
+    2.首次运行在项目文件夹下，执行命令：npm install 安装
+    3.安装成功后执行命令：npm run dev 运行测试环境：默认端口为8080  例如：127.0.0.1:8080/login (开发环境8080端口被占用，则端口号顺延)
+
+全局配置项与发布：
+    1.配置路径及文件：/src/config/index.js  此文件为全局参数配置文件
+    2.修改基础API连接：进入index.js文件后，找到baseUrl配置项
+    3.开发与生产环境：在baseUrl下 dev 为本地开发环境连接后台API地址。pro为生产环境时连接后台的API地址。
+    4.编译文件：配置好baseUrl内的pro连接后，在项目根目录下运行控制台。执行npm run build 即可执行编译。
+    5.编译生成目录：编译结束后生成的文件在项目根目录下的/dist文件夹内。配置到运行环境中即可访问（跨域建议配置Nginx）
+    6.Nginx代理配置说明：运行环境如果使用Nginx等端口代理方式，如果子页面出现404路径错误，请在nginx.conf的server端口配置中,
+       加入这行代码：try_files $uri $uri/ /index.html;  （Apache配置同理）
+
+代码目录：
+    1.代码目录统一在src文件夹下，public存放共用资源，游戏中详情图标在此文件下/color中，注意命名的匹配。
+    2.src文件夹下view文件夹为所有的页面目录。
+    3.router 文件夹为路由配置目录
+    4.api 文件夹下为接口API
+    5.config 为全局配置。
+
+游戏详情数据：
+    1.代码编写在：/src/view/players/players-game-detial.vue 中。
+    1.1 详情的匹配通过 fwType 参数区分，在switch中匹配游戏名 fwType,匹配承购后按照结构进行解析数据。 扑克牌通过pokerCards方法进行解析。
+
+首页及用户看板等图表使用的 Echarts.js
+    首页文件路径 /src/view/single-page/home/home.vue
+ 折线图文件路径 /src/view/single-page/home/example.vue
+ 饼状图组件路径 /src/components/charts/pie.vue
+ 柱状图组件路径 /src/components/charts/bar.vue
+ 如果要修改配置项请参阅 Echarts 的API文档
+    路由文件路径 /src/router/routers.js 所有页面及侧边栏菜单在此文件中配置。 access 数组控制权限，目前分为"administrator"总控和 "service"客服两种
+
+已注释的代码说明：
+   代码中有多段被注释的代码，是以前已实现的需求。但因后期调整暂时注释，如有需求去掉注释可重新使用。如已确认不再使用，应当删除。
+
+
+总控账号：全部
+代理账号：代理后台
+客服账号： 用户中心 注单详情
+操作账号： 用户中心 注单详情 代理中心 游戏管理

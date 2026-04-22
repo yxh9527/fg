@@ -1,0 +1,354 @@
+{
+  "appMapPath": "client-record2/maps/app.b98df11551009e75d7e7.js.map",
+  "cssMapPath": "client-record2/maps/app.ea95501c28a86deeecb2da5c0f369522.css.map",
+  "written": [
+    {
+      "path": "src/assets/js/http.js",
+      "origin": "webpack:///./src/assets/js/http.js"
+    },
+    {
+      "path": "src/App.vue",
+      "origin": "webpack:///App.vue"
+    },
+    {
+      "path": "src/components/Common/chess_account.vue",
+      "origin": "webpack:///chess_account.vue"
+    },
+    {
+      "path": "src/components/Common/chess_detail.vue",
+      "origin": "webpack:///chess_detail.vue"
+    },
+    {
+      "path": "src/components/Common/chess_record.vue",
+      "origin": "webpack:///chess_record.vue"
+    },
+    {
+      "path": "src/components/Common/fruit_account.vue",
+      "origin": "webpack:///fruit_account.vue"
+    },
+    {
+      "path": "src/components/Common/fruit_detail.vue",
+      "origin": "webpack:///fruit_detail.vue"
+    },
+    {
+      "path": "src/components/Common/fruit_record.vue",
+      "origin": "webpack:///fruit_record.vue"
+    },
+    {
+      "path": "src/components/Common/hunting_account.vue",
+      "origin": "webpack:///hunting_account.vue"
+    },
+    {
+      "path": "src/components/Common/hunting_detail.vue",
+      "origin": "webpack:///hunting_detail.vue"
+    },
+    {
+      "path": "src/components/Common/hunting_record.vue",
+      "origin": "webpack:///hunting_record.vue"
+    },
+    {
+      "path": "src/components/Common/slot_account.vue",
+      "origin": "webpack:///slot_account.vue"
+    },
+    {
+      "path": "src/components/Common/slot_detail.vue",
+      "origin": "webpack:///slot_detail.vue"
+    },
+    {
+      "path": "src/components/Common/slot_record.vue",
+      "origin": "webpack:///slot_record.vue"
+    },
+    {
+      "path": "src/components/Home.vue",
+      "origin": "webpack:///Home.vue"
+    },
+    {
+      "path": "src/components/Login.vue",
+      "origin": "webpack:///Login.vue"
+    },
+    {
+      "path": "src/components/refresh.vue",
+      "origin": "webpack:///refresh.vue"
+    },
+    {
+      "path": "src/assets/js/filter.js",
+      "origin": "webpack:///./src/assets/js/filter.js"
+    },
+    {
+      "path": "src/assets/js/global.js",
+      "origin": "webpack:///./src/assets/js/global.js"
+    },
+    {
+      "path": "src/components/Common/lang/en.js",
+      "origin": "webpack:///./src/components/Common/lang/en.js"
+    },
+    {
+      "path": "src/components/Common/lang/jajp.js",
+      "origin": "webpack:///./src/components/Common/lang/jajp.js"
+    },
+    {
+      "path": "src/components/Common/lang/kokr.js",
+      "origin": "webpack:///./src/components/Common/lang/kokr.js"
+    },
+    {
+      "path": "src/components/Common/lang/thth.js",
+      "origin": "webpack:///./src/components/Common/lang/thth.js"
+    },
+    {
+      "path": "src/components/Common/lang/vivn.js",
+      "origin": "webpack:///./src/components/Common/lang/vivn.js"
+    },
+    {
+      "path": "src/components/Common/lang/zh.js",
+      "origin": "webpack:///./src/components/Common/lang/zh.js"
+    },
+    {
+      "path": "src/components/Common/lang/zhhk.js",
+      "origin": "webpack:///./src/components/Common/lang/zhhk.js"
+    },
+    {
+      "path": "src/main.js",
+      "origin": "webpack:///./src/main.js"
+    },
+    {
+      "path": "src/routes.js",
+      "origin": "webpack:///./src/routes.js"
+    },
+    {
+      "path": "src/vuex/actions.js",
+      "origin": "webpack:///./src/vuex/actions.js"
+    },
+    {
+      "path": "src/vuex/getters.js",
+      "origin": "webpack:///./src/vuex/getters.js"
+    },
+    {
+      "path": "src/vuex/mutations.js",
+      "origin": "webpack:///./src/vuex/mutations.js"
+    },
+    {
+      "path": "src/vuex/state.js",
+      "origin": "webpack:///./src/vuex/state.js"
+    },
+    {
+      "path": "src/vuex/store.js",
+      "origin": "webpack:///./src/vuex/store.js"
+    },
+    {
+      "path": "src/assets/css/font-awesome.min.css",
+      "origin": "webpack:///./src/assets/css/font-awesome.min.css"
+    },
+    {
+      "path": "src/assets/css/global.css",
+      "origin": "webpack:///./src/assets/css/global.css"
+    },
+    {
+      "path": "src/assets/css/base.css",
+      "origin": "webpack:///./src/assets/css/base.css"
+    }
+  ],
+  "duplicates": [],
+  "conflicts": [],
+  "skipped": [
+    {
+      "source": "webpack:///static/js/app.b98df11551009e75d7e7.js",
+      "reason": "no-app-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_detail.vue?6098",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_detail.vue?038e",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_detail.vue?ea0d",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_detail.vue?e098",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./~/moment/locale ^\\.\\/.*$",
+      "reason": "no-app-target"
+    },
+    {
+      "source": "webpack:///./src/App.vue?bb67",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_account.vue?1cda",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_record.vue?8af4",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_account.vue?400d",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_record.vue?1414",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_account.vue?b5ca",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_record.vue?5230",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_account.vue?9292",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_record.vue?21fe",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Home.vue?73a7",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Login.vue",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/refresh.vue",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/App.vue?e39d",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_record.vue?f699",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Login.vue?5df8",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_detail.vue?752f",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_account.vue?4561",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_record.vue?f4a0",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_record.vue?7fb1",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_detail.vue?6080",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_record.vue?ee7a",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_account.vue?bbad",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_account.vue?f6a7",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/refresh.vue?9b75",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_detail.vue?9e61",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_detail.vue?c4b7",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_account.vue?3d26",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/components/Home.vue?fa44",
+      "reason": "compiled-vue-loader-artifact"
+    },
+    {
+      "source": "webpack:///./src/App.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./~/element-ui/lib/theme-chalk/index.css",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Home.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_detail.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_detail.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_detail.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_detail.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_record.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/slot_account.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_record.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/chess_account.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_record.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/fruit_account.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_record.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./src/components/Common/hunting_account.vue",
+      "reason": "no-css-target"
+    },
+    {
+      "source": "webpack:///./~/nprogress/nprogress.css",
+      "reason": "no-css-target"
+    }
+  ]
+}

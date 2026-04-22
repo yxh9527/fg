@@ -1,0 +1,12 @@
+go 1.24.0
+
+use (
+	./data-center
+	./app
+	./micro_service
+	./open-api
+	./web-api
+	./web-api-ex
+	./lottery
+	./game-data-summary
+)
