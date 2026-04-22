@@ -29,7 +29,7 @@ var (
 )
 
 func init() {
-	runCmd.Flags().String("config", "./config.yaml", "指定配置文件，默认使用当前目录下的config.yaml")
+	runCmd.Flags().String("config", "./config.yaml", "Path to config file, defaults to ./config.yaml")
 	rootCmd.AddCommand(runCmd)
 }
 
@@ -38,42 +38,54 @@ func run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		return
 	}
+
 	yamlFile, err := os.ReadFile(path)
 	if err != nil {
-		zap.L().Fatal("读取基础配置失败", zap.Any("error", err))
+		zap.L().Fatal("failed to read config file", zap.Any("error", err))
 	}
+
 	rc := &config.RunConfig{}
-	err = yaml.Unmarshal(yamlFile, rc)
-	if err != nil {
-		zap.L().Fatal("解析基础配置异常", zap.Any("error", err))
+	if err = yaml.Unmarshal(yamlFile, rc); err != nil {
+		zap.L().Fatal("failed to parse config file", zap.Any("error", err))
 	}
-	//初始化etcd
+
+	// Init Redis.
 	dao.NewRedisDao(rc.Redis.Host, rc.Redis.User, rc.Redis.Pwd)
-	//初始化配置信息
-	dao.ConfigsInit()
-	//初始化es
-	if err := dao.InitES(rc); err != nil {
-		panic(err)
-	}
-	//初始化mysql
+
+	// Init MySQL.
 	if err := dao.InitDB(rc); err != nil {
 		panic(err)
 	}
-	//初始化数据库
+
+	// Init database tables and seed data.
 	tables.InitMysqlDb(dao.Mysql().Manager, dao.Mysql().Player)
-	//初始化权限策略
+
+	// Load pool_config table data into Redis on startup.
+	if err := dao.SyncPoolConfigsToRedis(); err != nil {
+		panic(err)
+	}
+
+	// Init in-memory configs from Redis.
+	dao.ConfigsInit()
+
+	// Init Elasticsearch.
+	if err := dao.InitES(rc); err != nil {
+		panic(err)
+	}
+
+	// Init permission policy and scheduled jobs.
 	common.NewUrlPloy()
-	//
 	crontab.NewCrontab()
+
 	r := controller.NewRouter()
-	zap.L().Info("服务器启动成功")
+	zap.L().Info("server started")
 	if err := r.Run(fmt.Sprintf(":%d", rc.ServerPort)); err != nil {
-		zap.L().Fatal("HTTP Server启动失败", zap.Error(err))
+		zap.L().Fatal("failed to start HTTP server", zap.Error(err))
 	}
 }
 
 func main() {
-	// 初始化日志库
+	// Init logger.
 	InitZapLogger()
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Printf("%v", err)
