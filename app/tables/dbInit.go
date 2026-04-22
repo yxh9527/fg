@@ -261,6 +261,18 @@ func InitMysqlDb(m, p *gorm.DB) {
 				Value: string(value),
 			})
 		}
+		poolConfigs = append(poolConfigs, &manager.PoolConfig{
+			Key:   "/config/currency",
+			Value: "{\"currency\":{\"CNY\":1,\"USD\":7.2,\"EUR\":7.8,\"INR\":0.085,\"USDT\":7.2,\"BRL\":1.42,\"HK\":0.92,\"JPY\":0.045,\"MXN\":0.43,\"IDR\":0.0005,\"MYR\":1.5,\"PHP\":0.13,\"SGD\":5.4,\"VND\":0.0003,\"THB\":0.2,\"KRW\":0.005}}",
+		})
+		poolConfigs = append(poolConfigs, &manager.PoolConfig{
+			Key:   "/config/ctrl/default",
+			Value: "{\"award_config\":[{\"id\":1,\"name\":\"single\",\"min\":\"0\",\"max\":\"0\",\"pool_odds\":[{\"odds\":\"45\",\"multiple\":\"10\"},{\"odds\":\"50\",\"multiple\":\"20\"},{\"odds\":\"60\",\"multiple\":\"40\"}]},{\"id\":2,\"name\":\"default\",\"min\":\"2\",\"max\":\"5\",\"pool_odds\":[{\"odds\":\"95\",\"multiple\":\"80\"},{\"odds\":\"97\",\"multiple\":\"100\"},{\"odds\":\"98\",\"multiple\":\"120\"}]},{\"id\":3,\"name\":\"0-10\",\"min\":\"0\",\"max\":\"10\",\"pool_odds\":[{\"odds\":\"95\",\"multiple\":\"90\"},{\"odds\":\"95\",\"multiple\":\"120\"},{\"odds\":\"97\",\"multiple\":\"150\"}]},{\"id\":4,\"name\":\"10-35\",\"min\":\"10\",\"max\":\"35\",\"pool_odds\":[{\"odds\":\"65\",\"multiple\":\"50\"},{\"odds\":\"80\",\"multiple\":\"90\"},{\"odds\":\"88\",\"multiple\":\"130\"}]},{\"id\":5,\"name\":\"35-100\",\"min\":\"35\",\"max\":\"100\",\"pool_odds\":[{\"odds\":\"60\",\"multiple\":\"50\"},{\"odds\":\"80\",\"multiple\":\"70\"},{\"odds\":\"90\",\"multiple\":\"120\"}]},{\"id\":6,\"name\":\"-25-0\",\"min\":\"-25\",\"max\":\"0\",\"pool_odds\":[{\"odds\":\"90\",\"multiple\":\"50\"},{\"odds\":\"90\",\"multiple\":\"90\"},{\"odds\":\"95\",\"multiple\":\"150\"}]},{\"id\":7,\"name\":\"-50--25\",\"min\":\"-50\",\"max\":\"-25\",\"pool_odds\":[{\"odds\":\"90\",\"multiple\":\"50\"},{\"odds\":\"95\",\"multiple\":\"120\"},{\"odds\":\"98\",\"multiple\":\"150\"}]},{\"id\":8,\"name\":\"-100--50\",\"min\":\"-100\",\"max\":\"-50\",\"pool_odds\":[{\"odds\":\"90\",\"multiple\":\"120\"},{\"odds\":\"95\",\"multiple\":\"150\"},{\"odds\":\"99\",\"multiple\":\"180\"}]}],\"gameId\":0,\"symbol\":\"\"}",
+		})
+		poolConfigs = append(poolConfigs, &manager.PoolConfig{
+			Key:   "/config/autoCtrl",
+			Value: "[{\"totalEffect\":\"999999\",\"totalProfLoss\":\"500000\",\"totalProfLossRate\":\"60\",\"controlRate\":\"50\",\"score\":\"100000\"}]",
+		})
 		m.Create(poolConfigs)
 	}
 	//manager
