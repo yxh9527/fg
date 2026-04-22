@@ -3,10 +3,32 @@ package tables
 import (
 	"app/tables/manager"
 	"app/tables/player"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
 )
+
+type poolConfigItem struct {
+	Min        string `json:"min"`
+	Normal     string `json:"normal"`
+	Max        string `json:"max"`
+	NormalRate string `json:"normalRate"`
+	MinRate    string `json:"minRate"`
+	MaxRate    string `json:"maxRate"`
+	Control    string `json:"control"`
+	Revenue    string `json:"revenue"`
+	Base       string `json:"base"`
+}
+
+type poolConfigValue struct {
+	Symbol string                    `json:"symbol"`
+	Name   string                    `json:"name"`
+	NameZH string                    `json:"nameZH"`
+	GameID int                       `json:"gameId"`
+	Pool   map[string]poolConfigItem `json:"pool"`
+}
 
 // 初始化数据库结构
 func InitMysqlDb(m, p *gorm.DB) {
@@ -204,6 +226,43 @@ func InitMysqlDb(m, p *gorm.DB) {
 		}
 		m.Create(games)
 	}
+	if !m.Migrator().HasTable(&manager.PoolConfig{}) {
+		m.AutoMigrate(&manager.PoolConfig{})
+		var games []manager.Game
+		m.Find(&games)
+
+		poolConfigs := make([]*manager.PoolConfig, 0, len(games))
+		for _, game := range games {
+			value, err := json.Marshal(poolConfigValue{
+				Symbol: game.ConfName,
+				Name:   game.ConfName,
+				NameZH: game.NameZH,
+				GameID: game.Number,
+				Pool: map[string]poolConfigItem{
+					"1": {
+						Min:        "300",
+						Normal:     "900",
+						Max:        "3000",
+						NormalRate: "0.99",
+						MinRate:    "0.99",
+						MaxRate:    "0.99",
+						Control:    "1",
+						Revenue:    "0.03",
+						Base:       "0",
+					},
+				},
+			})
+			if err != nil {
+				panic(err)
+			}
+
+			poolConfigs = append(poolConfigs, &manager.PoolConfig{
+				Key:   fmt.Sprintf("/config/pool/%s", game.ConfName),
+				Value: string(value),
+			})
+		}
+		m.Create(poolConfigs)
+	}
 	//manager
 	m.AutoMigrate(&manager.Agent{},
 		&manager.AgentConfig{},
@@ -216,6 +275,7 @@ func InitMysqlDb(m, p *gorm.DB) {
 		&manager.Log{},
 		&manager.Msg{},
 		&manager.MsgType{},
+		&manager.PoolConfig{},
 		&manager.PlayerDataHour{},
 		&manager.PlayerDataSummary{},
 		&manager.PlayerProRank{},
