@@ -114,8 +114,8 @@ func (gm *GamesManager) GetById(number int64) *manager.Game {
 }
 
 func (gm *GamesManager) Add(g *manager.Game) {
-	gm.lock.RLock()
-	defer gm.lock.RUnlock()
+	gm.lock.Lock()
+	defer gm.lock.Unlock()
 
 	gm.gamesIdMap[int64(g.Number)] = g
 	gm.games[g.ConfName] = g
@@ -195,8 +195,8 @@ func (gm *AgentsManager) Get(id int64) *manager.Agent {
 }
 
 func (gm *AgentsManager) Add(a *manager.Agent) {
-	gm.lock.RLock()
-	defer gm.lock.RUnlock()
+	gm.lock.Lock()
+	defer gm.lock.Unlock()
 
 	gm.agents[a.Id] = a
 }

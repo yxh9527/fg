@@ -146,7 +146,12 @@ func (s *SingleCtrlMgr) setSingleCtrlScore(uid uint32, delta decimal.Decimal) {
 }
 
 func (s *SingleCtrlMgr) randInt(n int) int {
-	s.r = rand.New(rand.NewSource(time.Now().Unix()))
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.r == nil {
+		s.r = rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
 	return s.r.Intn(n)
 }
 
@@ -252,15 +257,15 @@ func (gcm *GameCacheMgr) GetAgent(agentId int64) *AgentData {
 }
 
 func (gcm *GameCacheMgr) GetUser(agentId, userId int64) *User {
-	gcm.lock.RLock()
-	defer gcm.lock.RUnlock()
-
-	agent := gcm.agents[agentId]
+	agent := gcm.GetAgent(agentId)
 	if agent == nil {
 		return nil
 	}
+	//细分代理锁
+	agent.lock.Lock()
+	defer agent.lock.Unlock()
 
-	return agent.userCache[uint32(userId)]
+	return agent.GetUser(uint32(userId))
 }
 
 func (gcm *GameCacheMgr) poolType(pool decimal.Decimal, pv *config.Pool) (int, decimal.Decimal) {
@@ -291,10 +296,11 @@ func (gcm *GameCacheMgr) Complete(agentId int64, userId uint32, symbol string, b
 			//bet作为有效打码
 			chips = bet
 		}
-		game.TotalChips = game.TotalChips.Add(chips)
+		game.TotalChips = game.TotalChips.Add(chips.Truncate(4))
 		//以有效下注计算水池后   可以直接放在下注的时候计算税收
 		// game.TotalRevenue = game.TotalRevenue.Add(bet.Mul(rate).Truncate(4))
 		game.UpdateTime = time.Now().Unix()
+		user.Count = user.Count.Add(decimal.NewFromInt(1))
 		user.TotalProfLoss = user.TotalProfLoss.Add(award)
 		user.UpdateTime = time.Now().Unix()
 	}
@@ -327,7 +333,7 @@ func (gcm *GameCacheMgr) ChangePool(agentId int64, userId int32, symbol, currenc
 		game := agent.GetGame(symbol)
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
 		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award)
+		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//累计税收
@@ -346,14 +352,11 @@ func (gcm *GameCacheMgr) ChangePool(agentId int64, userId int32, symbol, currenc
 }
 
 // 下注
-func (gcm *GameCacheMgr) ChangePoolWithNoLock(agentId int64, userId int32, symbol, currencyType, recordId string, bet, award, revence decimal.Decimal) bool {
-	agent := gcm.GetAgent(agentId)
-	user := agent.GetUser(uint32(userId))
+func (gcm *GameCacheMgr) ChangePoolWithNoLock(agent *AgentData, user *User, game *Game, currencyType, recordId string, bet, award, revence decimal.Decimal) bool {
 	if user.IsTourist == 0 {
-		game := agent.GetGame(symbol)
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
 		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award)
+		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//
@@ -366,7 +369,7 @@ func (gcm *GameCacheMgr) ChangePoolWithNoLock(agentId int64, userId int32, symbo
 		// user.Count = user.Count.Add(decimal.NewFromInt(1))
 		user.UpdateTime = time.Now().Unix()
 		after := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
-		zap.L().Debug("Pool", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("recordId", recordId), zap.Any("userId", userId), zap.Any("currencyType", currencyType), zap.Any("bet", bet), zap.Any("award", award), zap.Any("before", before), zap.Any("after", after))
+		zap.L().Debug("Pool", zap.Any("agentId", agent.Id), zap.Any("symbol", game.Symbol), zap.Any("recordId", recordId), zap.Any("userId", user.UserId), zap.Any("currencyType", currencyType), zap.Any("bet", bet), zap.Any("award", award), zap.Any("before", before), zap.Any("after", after))
 	}
 	return true
 }
@@ -374,8 +377,8 @@ func (gcm *GameCacheMgr) ChangePoolWithNoLock(agentId int64, userId int32, symbo
 func (gcm *GameCacheMgr) GetPool(agentId int64, symbol string) decimal.Decimal {
 	agent := gcm.GetAgent(agentId)
 	//细分代理锁
-	agent.lock.RLock()
-	defer agent.lock.RUnlock()
+	agent.lock.Lock()
+	defer agent.lock.Unlock()
 
 	game := agent.GetGame(symbol)
 	// zap.L().Debug("GetPool", zap.Any("agentId", agentId), zap.Any("symbol", symbol))
@@ -399,7 +402,7 @@ func (gcm *GameCacheMgr) CheckPoolWithChange(agentId int64, symbol, recordId, cu
 	if user.IsTourist == 0 {
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
 		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award)
+		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//
@@ -434,7 +437,7 @@ func (gcm *GameCacheMgr) CheckPoolWithOutBet(agentId int64, symbol, recordId, cu
 	if user.IsTourist == 0 {
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
 		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award)
+		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//
@@ -479,8 +482,8 @@ func (gcm *GameCacheMgr) SaveRoundData(agentId int64, roundId string, maxPay dec
 func (gcm *GameCacheMgr) GetPlayerAccount(agentId, userId int64) string {
 	agent := gcm.GetAgent(agentId)
 	//细分代理锁
-	agent.lock.RLock()
-	defer agent.lock.RUnlock()
+	agent.lock.Lock()
+	defer agent.lock.Unlock()
 
 	user := agent.GetUser(uint32(userId))
 	if user != nil {
@@ -510,7 +513,6 @@ func (gcm *GameCacheMgr) FinishRoundData(agentId int64, roundId string) *RoundIt
 
 	ri := agent.RoundCache[roundId]
 	if ri == nil {
-		zap.L().Debug("鏃犻鎵ｄ俊鎭?", zap.Any("agentId", agentId), zap.Any("roundId", roundId))
 		return nil
 	}
 	ri.Over = true
@@ -598,7 +600,7 @@ func (gcm *GameCacheMgr) Lottery(agentId int64, userId int32, pc *config.Pool, s
 	if user.Count.Equal(decimal.Zero) {
 		cnt = decimal.NewFromInt(1)
 	} else {
-		cnt = user.Count
+		cnt = user.Count.Add(decimal.NewFromInt(1))
 	}
 	//平均值*倍数
 	p2 := (user.TotalEffectBet.Div(cnt)).Mul(item.M)
@@ -617,7 +619,7 @@ func (gcm *GameCacheMgr) Lottery(agentId int64, userId int32, pc *config.Pool, s
 	}
 	zap.L().Debug("Lottery:赔付成功", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", p), zap.Any("返奖值", award))
 
-	CacheIns().ChangePoolWithNoLock(int64(agentId), int32(userId), symbol, currencyType, roundId, bet, award, revence)
+	CacheIns().ChangePoolWithNoLock(agent, user, game, currencyType, roundId, bet, award, revence)
 
 	return pool, true
 }
@@ -900,6 +902,7 @@ func CahceInit() {
 	if singleCtrl == nil {
 		singleCtrl = &SingleCtrlMgr{
 			lock: &sync.RWMutex{},
+			r:    rand.New(rand.NewSource(time.Now().UnixNano())),
 			sc:   make(map[uint32]*Ctrl),
 		}
 		//加载所有的控制信息

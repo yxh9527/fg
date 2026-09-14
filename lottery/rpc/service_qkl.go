@@ -777,10 +777,10 @@ func (d *LotteryService) QKLDoBet(_ context.Context, req *services.QKLDoBetReq) 
 			zap.Any("gameId", req.GameId))
 		return resp, nil
 	}
-	account := dao.CacheIns().GetPlayerAccount(int64(req.AgentId), int64(req.UserId))
-	if account == "" {
+	user := dao.CacheIns().GetUser(int64(req.AgentId), int64(req.UserId))
+	if user == nil {
 		resp.Code = services.ErrorCode_PARAMS_INVALID
-		zap.L().Error("QKLDoBet:获取账号信息失败",
+		zap.L().Error("QKLDoBet:获取用户信息失败",
 			zap.Any("agentId", req.AgentId),
 			zap.Any("roundId", req.RoundID),
 			zap.Any("playerId", req.UserId),
@@ -828,7 +828,7 @@ func (d *LotteryService) QKLDoBet(_ context.Context, req *services.QKLDoBetReq) 
 			resp.Code = services.ErrorCode_SYSTEM_ERROR
 			return resp, nil
 		}
-		if bet.GreaterThan(decimal.Zero) {
+		if bet.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
 			nc := currencyFromCent(tmp)
 			d.SaveBill(uint32(req.AgentId), req.UserId, bet.Neg(), nc.Truncate(2).InexactFloat64(), eGame.ConfName, "下注", req.CurrencyType, req.RoundID)
 		}
@@ -849,7 +849,7 @@ func (d *LotteryService) QKLDoBet(_ context.Context, req *services.QKLDoBetReq) 
 
 		//新余额
 		nc := currencyFromCent(tmp)
-		if win.GreaterThan(decimal.Zero) {
+		if win.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
 			d.SaveBill(uint32(req.AgentId), req.UserId, win, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "结算", req.CurrencyType, req.RoundID)
 		}
 		resp.Currency = nc.String()
@@ -864,9 +864,7 @@ func (d *LotteryService) QKLDoBet(_ context.Context, req *services.QKLDoBetReq) 
 			}
 		}
 	}
-
-	user := dao.CacheIns().GetUser(int64(req.AgentId), int64(req.UserId))
-	if user != nil && user.IsTourist == 0 {
+	if user.IsTourist == 0 {
 		if len(req.Result) > 0 {
 			ur := &entity.UserRecordInfo{}
 			err = jsoniter.UnmarshalFromString(req.Result, ur)
@@ -885,7 +883,7 @@ func (d *LotteryService) QKLDoBet(_ context.Context, req *services.QKLDoBetReq) 
 				req.RoundID,
 				req.CurrencyType,
 				eGame.ConfName,
-				account,
+				user.Account,
 				req.Result,
 				newCurrency,
 				uint32(eAgent.WebId),
@@ -1215,6 +1213,10 @@ func (d *LotteryService) QKLSettleMultiplayer(_ context.Context, req *services.Q
 			zap.L().Error("panic", zap.Any("err", err))
 		}
 	}()
+	resp = &services.QKLSettleMultiplayerResp{
+		Code:      services.ErrorCode_SYSTEM_ERROR,
+		Currencys: make([]*services.QKLNewCurrencyItem, 0),
+	}
 	if len(req.Records) <= 0 {
 		zap.L().Error("QKLSettleMultiplayer:批量结算", zap.Any("record count", len(req.Records)))
 		return resp, nil
@@ -1375,5 +1377,6 @@ func (d *LotteryService) QKLSettleMultiplayer(_ context.Context, req *services.Q
 		resArr = append(resArr, v)
 	}
 	resp.Currencys = resArr
+	resp.Code = services.ErrorCode_OK
 	return resp, nil
 }
