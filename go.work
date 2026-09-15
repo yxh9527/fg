@@ -6,7 +6,6 @@ use (
 	./micro_service
 	./open-api
 	./web-api
-	./web-api-ex
 	./lottery
 	./game-data-summary
 	./client-api
