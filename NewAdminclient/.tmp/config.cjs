@@ -15,10 +15,4 @@ const config = {
   homeName: "new-home",
 };
 
-export const setting = {
-  page: 1,
-  pageSize: 15,
-  pageOpts: [15, 30, 50, 100, 200, 300],
-};
-
-export default config;
+module.exports = config;
