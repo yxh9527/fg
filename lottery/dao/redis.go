@@ -425,6 +425,17 @@ func (rd *RedisDao) Set(key, value string, timeout int32) error {
 	return rd.cli.Set(context.Background(), key, value, to).Err()
 }
 
+// SetNX 仅当 key 不存在时写入，用于结算幂等占位。
+func (rd *RedisDao) SetNX(key, value string, timeout int32) (bool, error) {
+	var to time.Duration
+	if timeout > 0 {
+		to = time.Duration(timeout) * time.Second
+	} else {
+		to = -1
+	}
+	return rd.cli.SetNX(context.Background(), key, value, to).Result()
+}
+
 func (rd *RedisDao) Del(key string) error {
 	return rd.cli.Del(context.Background(), key).Err()
 }

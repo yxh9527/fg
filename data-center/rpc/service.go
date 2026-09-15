@@ -5,6 +5,7 @@ import (
 	"context"
 	"data-center/dao"
 	"micro_service/services"
+	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
@@ -137,11 +138,66 @@ func (d *DataCenterService) SetValue(_ context.Context, req *services.SetValueRe
 	return resp, nil
 }
 
-// 获取注单信息
-func (d *DataCenterService) GetRecords(ctx context.Context, req *services.GetRecordsReq) (resp *services.GetRecordsResp, err error) {
-	resp = &services.GetRecordsResp{}
-	resp.Code = services.ErrorCode_OK
-	resp.Data = d.es.GetRecords(req.UserId, req.Symbol, req.Hash, "")
+// 获取注单信息（ES 旧注单列表，规则 A：不另落 SlotSpinRecord）
+func (d *DataCenterService) GetRecords(_ context.Context, req *services.GetRecordsReq) (resp *services.GetRecordsResp, err error) {
+	resp = &services.GetRecordsResp{Code: services.ErrorCode_OK, Data: make([]*services.RecordItem, 0)}
+	if req == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		return resp, nil
+	}
+
+	symbol := strings.TrimSpace(req.Symbol)
+	if symbol == "" && req.GameId > 0 {
+		if g := d.db.GetGameByNumber(int64(req.GameId)); g != nil {
+			symbol = g.ConfName
+		}
+	}
+
+	// 兼容旧调用：仅 Hash 时走原路径语义
+	if strings.TrimSpace(req.Hash) != "" && req.Page == 0 && req.Size == 0 && req.StartTime == 0 && req.EndTime == 0 && strings.TrimSpace(req.Currency) == "" {
+		resp.Data = d.es.GetRecords(req.UserId, symbol, req.Hash, "")
+		resp.Total = int64(len(resp.Data))
+		return resp, nil
+	}
+
+	items, total, qErr := d.es.ListRecords(dao.RecordListQuery{
+		UserId:   req.UserId,
+		Symbol:   symbol,
+		Hash:     req.Hash,
+		Currency: req.Currency,
+		GameId:   req.GameId,
+		StartMs:  req.StartTime,
+		EndMs:    req.EndTime,
+		Page:     int(req.Page),
+		Size:     int(req.Size),
+	})
+	if qErr != nil {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		return resp, nil
+	}
+	resp.Data = items
+	resp.Total = total
+	return resp, nil
+}
+
+// GetRecordDetail 详情必须匹配 recordId + userId + gameId；不匹配返回 found=false。
+func (d *DataCenterService) GetRecordDetail(_ context.Context, req *services.GetRecordDetailReq) (resp *services.GetRecordDetailResp, err error) {
+	resp = &services.GetRecordDetailResp{Code: services.ErrorCode_OK, Found: false}
+	if req == nil || strings.TrimSpace(req.RecordId) == "" || req.UserId == 0 || req.GameId == 0 {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		return resp, nil
+	}
+	symbol := ""
+	if g := d.db.GetGameByNumber(int64(req.GameId)); g != nil {
+		symbol = g.ConfName
+	}
+	item, found, qErr := d.es.GetRecordDetailByKeys(req.RecordId, req.UserId, req.GameId, symbol)
+	if qErr != nil {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		return resp, nil
+	}
+	resp.Found = found
+	resp.Data = item
 	return resp, nil
 }
 

@@ -9,4 +9,5 @@ use (
 	./web-api-ex
 	./lottery
 	./game-data-summary
+	./client-api
 )

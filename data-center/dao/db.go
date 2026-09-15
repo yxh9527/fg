@@ -86,6 +86,34 @@ func (dd *DBDao) GetPlayer(ctx context.Context, playerId uint32) (*player.Player
 	return &user, err
 }
 
+func (dd *DBDao) GetAgent(agentId int64) (*manager.Agent, error) {
+	var agent manager.Agent
+	err := dd.manager.Model(manager.Agent{}).Where("id=? AND isDel=0", agentId).Take(&agent).Error
+	if err != nil {
+		return nil, err
+	}
+	return &agent, nil
+}
+
+// ResolveTopAgentId 向上查找一级代理；找不到时回退到当前代理。
+func (dd *DBDao) ResolveTopAgentId(agentId int64) uint32 {
+	current := agentId
+	for i := 0; i < 8 && current > 0; i++ {
+		agent, err := dd.GetAgent(current)
+		if err != nil || agent == nil {
+			break
+		}
+		if agent.Level <= 1 || agent.UpperLevel <= 0 {
+			return uint32(agent.Id)
+		}
+		current = agent.UpperLevel
+	}
+	if agentId > 0 {
+		return uint32(agentId)
+	}
+	return 0
+}
+
 func (dd *DBDao) GameManager() *GamesManager {
 	return dd.GM
 }
@@ -138,6 +166,25 @@ func (dd *DBDao) GetGame(symbol string) *manager.Game {
 	dd.GM.lock.Lock()
 	defer dd.GM.lock.Unlock()
 	return dd.GM.games[symbol]
+}
+
+func (dd *DBDao) GetGameByNumber(number int64) *manager.Game {
+	dd.GM.lock.RLock()
+	for _, g := range dd.GM.games {
+		if int64(g.Number) == number {
+			dd.GM.lock.RUnlock()
+			return g
+		}
+	}
+	dd.GM.lock.RUnlock()
+
+	tmp := &manager.Game{}
+	err := dd.manager.Model(manager.Game{}).Where("number = ?", number).Take(tmp).Error
+	if err != nil {
+		return nil
+	}
+	dd.AddGame(tmp)
+	return tmp
 }
 
 // 添加游戏配置

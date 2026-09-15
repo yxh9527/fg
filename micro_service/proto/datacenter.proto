@@ -16,8 +16,10 @@ service DataCenterService {
     rpc SetValue (SetValueReq) returns (SetValueResp);
     //修改玩家信息
     rpc UpdatePlayerAvatarAndGender (UpdatePlayerAvatarAndGenderReq) returns (UpdatePlayerAvatarAndGenderResp);
-    //获取注单信息
+    //获取注单信息（列表，读 ES 旧注单）
     rpc GetRecords(GetRecordsReq) returns (GetRecordsResp);
+    //注单详情：必须匹配 recordId + userId + gameId
+    rpc GetRecordDetail(GetRecordDetailReq) returns (GetRecordDetailResp);
     //获取游戏列表
     rpc GetGameList(GetGameListReq) returns (GetGameListResp);
     //加锁
@@ -27,6 +29,12 @@ service DataCenterService {
     //获取session
     rpc GetSesson(GetSessionReq) returns (GetSessionResp);
 
+    // Gateway 鉴权：校验 token / 游戏权限 / 重入
+    rpc Authenticate(AuthenticateReq) returns (AuthenticateResp);
+    // Gateway 登录资料
+    rpc GetLoginData(GetLoginDataReq) returns (GetLoginDataResp);
+    // Gateway token 校验
+    rpc ValidateToken(ValidateTokenReq) returns (ValidateTokenResp);
 }
 
 message GetSessionReq {
@@ -82,7 +90,13 @@ message UserUnLockResp{
 message GetRecordsReq {
     int64  UserId = 1;
     string Symbol = 2;
-    string Hash = 3; //hash不为空，则以hash为准忽略其他参数
+    string Hash = 3; //hash不为空，则以hash为准忽略其他参数（兼容旧调用）
+    string Currency = 4;
+    uint32 GameId = 5; // 可转 symbol；与 Symbol 二选一
+    int64  StartTime = 6; // playedDate 起始（毫秒），0 表示不限
+    int64  EndTime = 7;   // playedDate 结束（毫秒），0 表示不限
+    int32  Page = 8;      // 从 1 开始，默认 1
+    int32  Size = 9;      // 默认 20，最大 100
 }
 
 message RecordItem {
@@ -103,11 +117,26 @@ message RecordItem {
     double balance_cash = 15 ;
     double balance_bonus = 16;
     string hash = 17;
+    uint32 gameId = 18;
+    string gameName = 19;
 }
 
 message GetRecordsResp{
     base.error_code code = 1;
     repeated RecordItem data = 2;
+    int64 total = 3;
+}
+
+message GetRecordDetailReq {
+    string recordId = 1; // hash 或 roundID
+    uint32 userId = 2;
+    uint32 gameId = 3;
+}
+
+message GetRecordDetailResp {
+    base.error_code code = 1;
+    bool found = 2;
+    RecordItem data = 3;
 }
 
 message RecordLog {
@@ -156,4 +185,56 @@ message UpdatePlayerAvatarAndGenderReq {
 
 message UpdatePlayerAvatarAndGenderResp {
 
+}
+
+message AuthenticateReq {
+    string token = 1;
+    uint32 gameId = 2;
+    uint32 entryUserId = 3; // 可选，>0 时必须与 session 用户一致
+}
+
+message AuthenticateResp {
+    base.error_code code = 1;
+    bool success = 2;
+    bool isReEnter = 3;
+    int64 attemptCount = 4;
+    uint32 userId = 5;
+    string message = 6;
+}
+
+message GetLoginDataReq {
+    uint32 userId = 1;
+}
+
+message LoginCurrency {
+    uint32 currencyId = 1;
+    string symbol = 2;
+    double currencyRate = 3;
+}
+
+message LoginProfile {
+    uint32 userId = 1;
+    string userName = 2;
+    uint32 agentId = 3;
+    uint32 topAgentId = 4;
+    int32 userIcon = 5;
+    int32 loginType = 6;
+    int32 gm = 7;
+    double rate = 8;
+    LoginCurrency currency = 9;
+}
+
+message GetLoginDataResp {
+    base.error_code code = 1;
+    LoginProfile profile = 2;
+}
+
+message ValidateTokenReq {
+    string token = 1;
+    uint32 userId = 2;
+}
+
+message ValidateTokenResp {
+    base.error_code code = 1;
+    bool valid = 2;
 }
