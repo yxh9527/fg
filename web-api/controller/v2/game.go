@@ -1,9 +1,10 @@
-package v2
+﻿package v2
 
 import (
 	"app/config"
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"app/tables/manager"
 	"context"
 	"encoding/json"
@@ -189,7 +190,7 @@ func ClearGameState(ctx *gin.Context) {
 	currency := ctx.Query("currency")
 	game := &manager.Game{}
 	dao.Mysql().Manager.Where("number=?", gameId).Take(game)
-	dao.Es().DeleteByQuery("pp_game_states").Query(elastic.NewBoolQuery().Filter(elastic.NewTermQuery("_id", fmt.Sprintf("%d-%s-%s", playerId, game.ConfName, currency)))).WaitForCompletion(false).Do(context.Background())
+	dao.Es().DeleteByQuery(esindex.GameStates()).Query(elastic.NewBoolQuery().Filter(elastic.NewTermQuery("_id", fmt.Sprintf("%d-%s-%s", playerId, game.ConfName, currency)))).WaitForCompletion(false).Do(context.Background())
 	zap.L().Debug("清理玩家指定游戏状态成功", zap.Any("playerId", playerId), zap.Any("name", game.NameZH), zap.Any("symbol", game.ConfName), zap.Any("currency", currency))
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Data: map[string]interface{}{
 		"data": config.CfgIns.GetSystemConfig(),
@@ -209,7 +210,7 @@ func QueryOrder(ctx *gin.Context) {
 	}
 	querys = append(querys, elastic.NewRangeQuery("isTourist").Lte(0))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).
 		FetchSourceContext(elastic.NewFetchSourceContext(true).Exclude("init", "log")).
 		Query(boolQuery).
 		Pretty(true).

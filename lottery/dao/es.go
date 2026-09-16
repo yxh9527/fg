@@ -3,6 +3,7 @@ package dao
 import (
 	"app/config"
 	"app/entity"
+	"app/esindex"
 	"context"
 	"crypto/md5"
 	"fmt"
@@ -47,7 +48,7 @@ type PoolRecordLog struct {
 }
 
 func (e *ESDao) Add(log *PoolRecordLog) {
-	if _, err := e.Client.Index().Index("pp_pool_record_log").BodyJson(log).Do(context.Background()); err != nil {
+	if _, err := e.Client.Index().Index(esindex.PoolRecordLog()).BodyJson(log).Do(context.Background()); err != nil {
 		zap.L().Error("数据入库失败", zap.Error(err))
 		return
 	}
@@ -59,7 +60,7 @@ func (esDao *ESDao) BulkRecordsSave(data []*entity.CacheRecordsReq) error {
 	for _, req := range data {
 		hashStr := fmt.Sprintf("%d|%d|%s", req.AgentId, req.UserId, req.RoundID)
 		req.Hash = fmt.Sprintf("%x", md5.Sum([]byte(hashStr)))
-		records = append(records, elastic.NewBulkIndexRequest().Index("pp_gp_settlement").Id(req.Hash).Doc(req))
+		records = append(records, elastic.NewBulkIndexRequest().Index(esindex.Settlement()).Id(req.Hash).Doc(req))
 	}
 	bulkService.Add(records...)
 	_, err := bulkService.Do(context.Background())
@@ -73,7 +74,7 @@ func (esDao *ESDao) BulkBillsSave(data []*entity.CacheBillsReq) error {
 	bulkService := esDao.Client.Bulk()
 	records := make([]elastic.BulkableRequest, 0)
 	for _, req := range data {
-		records = append(records, elastic.NewBulkIndexRequest().Index("pp_gp_flowing_water").Doc(req))
+		records = append(records, elastic.NewBulkIndexRequest().Index(esindex.FlowingWater()).Doc(req))
 	}
 	bulkService.Add(records...)
 	_, err := bulkService.Do(context.Background())
@@ -90,7 +91,7 @@ func (esDao *ESDao) BulkBillsSave(data []*entity.CacheBillsReq) error {
 // 	querys = append(querys, elastic.NewMatchPhraseQuery("currency", req.Currency))
 // 	// zap.L().Debug("获取游戏状态", zap.Any("req", req))
 // 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-// 	resp, err := esDao.Client.Search().Index("pp_game_states").
+// 	resp, err := esDao.Client.Search().Index(esindex.GameStates()).
 // 		Query(boolQuery).
 // 		Pretty(true).
 // 		Do(context.Background())

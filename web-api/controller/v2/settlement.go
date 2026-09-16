@@ -1,8 +1,9 @@
-package v2
+﻿package v2
 
 import (
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -68,7 +69,7 @@ func SettlementList(ctx *gin.Context) {
 		querys = append(querys, elastic.NewMatchQuery("nickName", nickName))
 	}
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).
 		FetchSourceContext(elastic.NewFetchSourceContext(true).Exclude("init")).
 		Query(boolQuery).
 		Pretty(true).
@@ -131,7 +132,7 @@ func SettlementListWithAgentId(ctx *gin.Context) {
 	querys = append(querys, elastic.NewTermQuery("agentId", agentId))
 	querys = append(querys, elastic.NewRangeQuery("isTourist").Lte(0))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, _ := dao.Es().Search().Index("pp_gp_settlement").
+	resp, _ := dao.Es().Search().Index(esindex.Settlement()).
 		Query(boolQuery).
 		Pretty(true).
 		Size(pageSize).
@@ -198,7 +199,7 @@ func ExportSettlmentCountWithAgentId(ctx *gin.Context) {
 	querys = append(querys, elastic.NewRangeQuery("isTourist").Lte(0))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
 	aggs := elastic.NewValueCountAggregation().Field("roundID")
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).
 		Query(boolQuery).
 		Aggregation("count", aggs).
 		Pretty(true).
@@ -265,7 +266,7 @@ func ExportSettlementsWithAgentId(ctx *gin.Context) {
 	}
 	querys = append(querys, elastic.NewRangeQuery("isTourist").Lte(0))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).
 		FetchSourceContext(elastic.NewFetchSourceContext(true).Exclude("init", "log")).
 		Size(10000).
 		Query(boolQuery).

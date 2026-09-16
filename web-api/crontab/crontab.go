@@ -1,7 +1,8 @@
-package crontab
+﻿package crontab
 
 import (
 	"app/entity/view"
+	"app/esindex"
 	"app/tables/manager"
 	"context"
 	"encoding/json"
@@ -50,9 +51,9 @@ func clearPool() {
 func clearSettlementData() {
 	t := time.Now().Unix() - 3*30*24*60*60
 	zap.L().Debug("定时清理数据开始")
-	dao.Es().DeleteByQuery("pp_gp_settlement").Query(elastic.NewBoolQuery().Filter(elastic.NewRangeQuery("playedDate").Lte(t))).WaitForCompletion(false).Do(context.Background())
-	dao.Es().DeleteByQuery("pp_flowing_water").Query(elastic.NewBoolQuery().Filter(elastic.NewRangeQuery("beginTime").Lte(t))).WaitForCompletion(false).Do(context.Background())
-	dao.Es().DeleteByQuery("pp_pool_record_log").Query(elastic.NewBoolQuery().Filter(elastic.NewRangeQuery("beginTime").Lte(t))).WaitForCompletion(false).Do(context.Background())
+	dao.Es().DeleteByQuery(esindex.Settlement()).Query(elastic.NewBoolQuery().Filter(elastic.NewRangeQuery("playedDate").Lte(t))).WaitForCompletion(false).Do(context.Background())
+	dao.Es().DeleteByQuery(esindex.FlowingWaterLegacy()).Query(elastic.NewBoolQuery().Filter(elastic.NewRangeQuery("beginTime").Lte(t))).WaitForCompletion(false).Do(context.Background())
+	dao.Es().DeleteByQuery(esindex.PoolRecordLog()).Query(elastic.NewBoolQuery().Filter(elastic.NewRangeQuery("beginTime").Lte(t))).WaitForCompletion(false).Do(context.Background())
 	zap.L().Debug("定时清理数据结束")
 }
 
@@ -96,7 +97,7 @@ func getUserSettlementStatisData(start, end int64) []*view.UserGameDataStatisIte
 	aggs.SubAggregation("chipsTotal", elastic.NewSumAggregation().Field("chips"))
 	query := elastic.NewRangeQuery("createTime").Gte(start).Lt(end)
 	boolQuery := elastic.NewBoolQuery().Must(query)
-	resp, _ := dao.Es().Search().Index("pp_gp_settlement").Query(boolQuery).Aggregation("userId", aggs).Pretty(true).Size(0).Do(context.Background())
+	resp, _ := dao.Es().Search().Index(esindex.Settlement()).Query(boolQuery).Aggregation("userId", aggs).Pretty(true).Size(0).Do(context.Background())
 	result := make([]*view.UserGameDataStatisItem, 0, 64)
 	items, ok := resp.Aggregations.Terms("userId")
 	if ok {

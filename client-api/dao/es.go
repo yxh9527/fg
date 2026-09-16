@@ -1,4 +1,4 @@
-package dao
+﻿package dao
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"app/esindex"
 	"client-api/config"
 
 	"github.com/olivere/elastic/v7"
@@ -140,7 +141,7 @@ func (d *ESDao) ListRecords(q RecordListQuery) ([]*RecordItem, int64, error) {
 	}
 	from := (page - 1) * size
 	resp, err := d.es.Search().
-		Index("pp_gp_settlement").
+		Index(esindex.Settlement()).
 		FetchSourceContext(elastic.NewFetchSourceContext(true).Include(source...)).
 		Query(boolQuery).
 		From(from).
@@ -190,7 +191,7 @@ func (d *ESDao) GetRecordDetail(recordId string, userId, gameId uint32, symbol s
 			elastic.NewBoolQuery().Should(should...).MinimumNumberShouldMatch(1),
 		)
 		resp, err := d.es.Search().
-			Index("pp_gp_settlement").
+			Index(esindex.Settlement()).
 			Query(boolQuery).
 			Size(1).
 			Sort("playedDate", false).
@@ -277,7 +278,7 @@ func (d *ESDao) ListBills(q BillListQuery) ([]*BillItem, int64, error) {
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
 	from := (page - 1) * size
 	resp, err := d.es.Search().
-		Index("pp_gp_flowing_water").
+		Index(esindex.FlowingWater()).
 		Query(boolQuery).
 		From(from).
 		Size(size).

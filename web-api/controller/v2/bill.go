@@ -1,8 +1,9 @@
-package v2
+﻿package v2
 
 import (
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -41,7 +42,7 @@ func BillList(ctx *gin.Context) {
 		querys = append(querys, elastic.NewMatchPhraseQuery("roundId", officeNumber))
 	}
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, _ := dao.Es().Search().Index("pp_gp_flowing_water").
+	resp, _ := dao.Es().Search().Index(esindex.FlowingWater()).
 		Query(boolQuery).
 		Pretty(true).
 		Size(pageSize).

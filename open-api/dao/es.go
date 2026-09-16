@@ -1,7 +1,8 @@
-package dao
+﻿package dao
 
 import (
 	"app/config"
+	"app/esindex"
 	"context"
 	"encoding/json"
 	"errors"
@@ -81,7 +82,7 @@ func (esc *EsClient) GetListWithRowVersion(agentId, rowVersion int64) []interfac
 	querys = append(querys, elastic.NewTermQuery("complete", true))
 	query := elastic.NewBoolQuery().Must(querys...)
 	sourceQuery := elastic.NewFetchSourceContext(true).Exclude("init", "log")
-	resp, err := esc.es.Search().Index("pp_gp_settlement").
+	resp, err := esc.es.Search().Index(esindex.Settlement()).
 		Size(1000).
 		Query(query).
 		Sort("playedDate", true).
@@ -112,7 +113,7 @@ func (esc *EsClient) GetListWithTimeRange(agentId, startTime, endTime int64) []i
 	querys = append(querys, elastic.NewTermQuery("complete", true))
 	query := elastic.NewBoolQuery().Must(querys...)
 	sourceQuery := elastic.NewFetchSourceContext(true).Exclude("init", "log")
-	resp, err := esc.es.Search().Index("pp_gp_settlement").
+	resp, err := esc.es.Search().Index(esindex.Settlement()).
 		Size(10000).
 		Query(query).
 		Sort("playedDate", true).

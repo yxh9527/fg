@@ -1,7 +1,8 @@
-package dao
+﻿package dao
 
 import (
 	"app/entity"
+	"app/esindex"
 	"context"
 	"crypto/md5"
 	"encoding/json"
@@ -27,7 +28,7 @@ func (esDao *ESDao) BulkRecordsSave(data []*entity.CacheRecordsReq) error {
 	for _, req := range data {
 		hashStr := fmt.Sprintf("%d|%d|%s", req.AgentId, req.UserId, req.RoundID)
 		req.Hash = fmt.Sprintf("%x", md5.Sum([]byte(hashStr)))
-		records = append(records, elastic.NewBulkIndexRequest().Index("pp_gp_settlement").Id(req.Hash).Doc(req))
+		records = append(records, elastic.NewBulkIndexRequest().Index(esindex.Settlement()).Id(req.Hash).Doc(req))
 	}
 	bulkService.Add(records...)
 	_, err := bulkService.Do(context.Background())
@@ -41,7 +42,7 @@ func (esDao *ESDao) BulkBillsSave(data []*entity.CacheBillsReq) error {
 	bulkService := esDao.es.Bulk()
 	records := make([]elastic.BulkableRequest, 0)
 	for _, req := range data {
-		records = append(records, elastic.NewBulkIndexRequest().Index("pp_gp_flowing_water").Doc(req))
+		records = append(records, elastic.NewBulkIndexRequest().Index(esindex.FlowingWater()).Doc(req))
 	}
 	bulkService.Add(records...)
 	_, err := bulkService.Do(context.Background())
@@ -71,7 +72,7 @@ func (esDao *ESDao) GetRecords(userId int64, symbol, hash, currency string) []*s
 		sorce = []string{"init", "log"}
 	}
 	includeFields := elastic.NewFetchSourceContext(true).Include(sorce...)
-	resp, _ := esDao.es.Search().Index("pp_gp_settlement").FetchSourceContext(includeFields).
+	resp, _ := esDao.es.Search().Index(esindex.Settlement()).FetchSourceContext(includeFields).
 		Query(boolQuery).
 		Pretty(true).
 		Size(100).
@@ -95,7 +96,7 @@ func (esDao *ESDao) GetRecordsByRoundId(roundId string) []*services.RecordItem {
 	sorce := []string{"currency", "currencySymbol", "symbol", "log"}
 	includeFields := elastic.NewFetchSourceContext(true).Include(sorce...)
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, _ := esDao.es.Search().Index("pp_gp_settlement").FetchSourceContext(includeFields).
+	resp, _ := esDao.es.Search().Index(esindex.Settlement()).FetchSourceContext(includeFields).
 		Query(boolQuery).
 		Pretty(true).
 		Size(100).
@@ -116,7 +117,7 @@ func (esDao *ESDao) GetRecordsReplayDataByRoundId(roundId string) []*services.Re
 	rid, _ := strconv.ParseInt(roundId, 10, 64)
 	querys = append(querys, elastic.NewTermQuery("roundID", rid))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := esDao.es.Search().Index("pp_gp_settlement").
+	resp, err := esDao.es.Search().Index(esindex.Settlement()).
 		Query(boolQuery).
 		Pretty(true).
 		Size(100).
@@ -139,7 +140,7 @@ func (esDao *ESDao) GetRecordsReplayDataByToken(token string) []*services.Record
 	querys := make([]elastic.Query, 0)
 	querys = append(querys, elastic.NewTermQuery("hash", token))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := esDao.es.Search().Index("pp_gp_settlement").
+	resp, err := esDao.es.Search().Index(esindex.Settlement()).
 		Query(boolQuery).
 		Pretty(true).
 		Size(100).
@@ -166,7 +167,7 @@ func (esDao *ESDao) GetRtpGreaterThan10(symbol string, userId int64) []*services
 	querys = append(querys, elastic.NewRangeQuery("rtp").Gte(10))
 	querys = append(querys, elastic.NewTermQuery("symbol", symbol))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := esDao.es.Search().Index("pp_gp_settlement").FetchSourceContext(includeFields).
+	resp, err := esDao.es.Search().Index(esindex.Settlement()).FetchSourceContext(includeFields).
 		Query(boolQuery).
 		Pretty(true).
 		Size(100).

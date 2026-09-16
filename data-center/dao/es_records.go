@@ -1,9 +1,11 @@
-package dao
+﻿package dao
 
 import (
 	"context"
 	"encoding/json"
 	"strings"
+
+	"app/esindex"
 
 	"github.com/olivere/elastic/v7"
 	"go.uber.org/zap"
@@ -79,7 +81,7 @@ func (esDao *ESDao) ListRecords(q RecordListQuery) ([]*services.RecordItem, int6
 	includeFields := elastic.NewFetchSourceContext(true).Include(source...)
 	from := (page - 1) * size
 	resp, err := esDao.es.Search().
-		Index("pp_gp_settlement").
+		Index(esindex.Settlement()).
 		FetchSourceContext(includeFields).
 		Query(boolQuery).
 		From(from).
@@ -138,7 +140,7 @@ func (esDao *ESDao) GetRecordDetailByKeys(recordId string, userId, gameId uint32
 		}
 		boolQuery := elastic.NewBoolQuery().Must(querys...)
 		resp, err := esDao.es.Search().
-			Index("pp_gp_settlement").
+			Index(esindex.Settlement()).
 			Query(boolQuery).
 			Size(1).
 			Sort("playedDate", false).

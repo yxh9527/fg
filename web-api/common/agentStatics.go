@@ -1,8 +1,9 @@
-package common
+﻿package common
 
 import (
 	"app/config"
 	"app/entity/view"
+	"app/esindex"
 	"context"
 	"crypto/md5"
 	"fmt"
@@ -30,7 +31,7 @@ func getSettlementStat(start, end time.Time) map[string]*view.DataAnalysisItem {
 	query1 := elastic.NewRangeQuery("playedDate").Gte(start.UnixMilli()).Lt(end.UnixMilli())
 	query2 := elastic.NewRangeQuery("isTourist").Lte(0)
 	boolQuery := elastic.NewBoolQuery().Must(query1, query2)
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").Query(boolQuery).Aggregation("webId", webIdAggs).Size(0).Do(context.Background())
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).Query(boolQuery).Aggregation("webId", webIdAggs).Size(0).Do(context.Background())
 	if err != nil {
 		zap.L().Error("获取注单打点数据异常", zap.Any("err", err))
 		return nil
@@ -124,7 +125,7 @@ func getSettlementRangeData(start, end time.Time) map[string]*view.DataAnalysisI
 	aggs.SubAggregation("gameId", gameAggs)
 	webIdAggs.SubAggregation("agentId", aggs)
 	boolQuery := elastic.NewBoolQuery().Must(elastic.NewRangeQuery("startTime").Gte(start.Unix()), elastic.NewRangeQuery("endTime").Lte(end.Unix()))
-	resp, err := dao.Es().Search().Index("pp_data_analysis_range").Query(boolQuery).Aggregation("webId", webIdAggs).Size(0).Do(context.Background())
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysisRange()).Query(boolQuery).Aggregation("webId", webIdAggs).Size(0).Do(context.Background())
 	if err != nil {
 		zap.L().Error("获取注单打点数据异常", zap.Any("err", err))
 		return nil
@@ -187,7 +188,7 @@ func DataAnalysisRangeSave(data map[string]*view.DataAnalysisItem) {
 	bulkService := dao.Es().Bulk()
 	records := make([]elastic.BulkableRequest, 0)
 	for _, item := range data {
-		records = append(records, elastic.NewBulkIndexRequest().Index("pp_data_analysis_range").Doc(item))
+		records = append(records, elastic.NewBulkIndexRequest().Index(esindex.DataAnalysisRange()).Doc(item))
 	}
 	bulkService.Add(records...)
 	_, err := bulkService.Do(context.Background())
@@ -201,7 +202,7 @@ func DataAnalysisSave(data map[string]*view.DataAnalysisItem) {
 	bulkService := dao.Es().Bulk()
 	records := make([]elastic.BulkableRequest, 0)
 	for _, item := range data {
-		records = append(records, elastic.NewBulkIndexRequest().Index("pp_data_analysis").Id(fmt.Sprintf("%x", md5.Sum([]byte(item.Date+fmt.Sprintf("%d", item.AgentId)+item.Symbol)))).Doc(item))
+		records = append(records, elastic.NewBulkIndexRequest().Index(esindex.DataAnalysis()).Id(fmt.Sprintf("%x", md5.Sum([]byte(item.Date+fmt.Sprintf("%d", item.AgentId)+item.Symbol)))).Doc(item))
 	}
 	bulkService.Add(records...)
 	_, err := bulkService.Do(context.Background())

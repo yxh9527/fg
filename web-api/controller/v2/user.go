@@ -1,8 +1,9 @@
-package v2
+﻿package v2
 
 import (
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"app/tables/manager"
 	"context"
 	"encoding/json"
@@ -84,7 +85,7 @@ func getUsersMonthAggs(startTime, endTime int64, ids []interface{}) []*view.User
 	aggs = aggs.SubAggregation("effectiveBetsTotal", elastic.NewSumAggregation().Field("bet"))
 	aggs = aggs.SubAggregation("profitLossTotal", elastic.NewSumAggregation().Field("win"))
 	aggs = aggs.SubAggregation("docCount", elastic.NewSumAggregation().Field("doc_count"))
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).
 		Size(0).
 		FetchSourceContext(source).
 		Query(boolQuery).

@@ -1,9 +1,10 @@
-package v2
+﻿package v2
 
 import (
 	"app/config"
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -33,7 +34,7 @@ func StockList(ctx *gin.Context) {
 	querys = append(querys, elastic.NewTermsQuery("symbol", ids...))
 	querys = append(querys, elastic.NewTermQuery("agentId", agentId))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_pool_record_log").
+	resp, err := dao.Es().Search().Index(esindex.PoolRecordLog()).
 		Query(boolQuery).
 		Pretty(true).
 		Size(pageSize).

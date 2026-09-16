@@ -1,7 +1,8 @@
-package dao
+﻿package dao
 
 import (
 	"app/config"
+	"app/esindex"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -94,7 +95,7 @@ func (esi *EsInfo) GetAllSettlementData(bTime, eTime int64) []*config.DataItem {
 			settlementData = append(settlementData, data)
 		}
 	}
-	if res, err := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+	if res, err := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 		Size(10000).
 		Query(query1).
 		FetchSourceContext(source).
@@ -108,7 +109,7 @@ func (esi *EsInfo) GetAllSettlementData(bTime, eTime int64) []*config.DataItem {
 					zap.L().Debug("GetAllSettlementData", zap.Any("耗时", endTm-startTm))
 					return settlementData
 				}
-				if result, e := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+				if result, e := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 					Pretty(true).
 					ScrollId(scoreId).
 					Size(10000).
@@ -159,7 +160,7 @@ func (esi *EsInfo) GetRegisterActive(agentId, bTime, eTime int64) map[uint32]boo
 		}
 	}
 
-	if res, err := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+	if res, err := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 		Size(1000).
 		Query(query1).
 		Query(query2).
@@ -173,7 +174,7 @@ func (esi *EsInfo) GetRegisterActive(agentId, bTime, eTime int64) map[uint32]boo
 				if scoreId == "" {
 					return userIds
 				}
-				if result, e := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+				if result, e := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 					ScrollId(scoreId).
 					Size(1000).
 					Query(query1).
@@ -220,7 +221,7 @@ func (esi *EsInfo) GetAgentRegisterActiveByGameId(agentId, gameId, bTime, eTime 
 		}
 	}
 
-	if res, err := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+	if res, err := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 		Size(1000).
 		Query(query1).
 		Query(query2).
@@ -235,7 +236,7 @@ func (esi *EsInfo) GetAgentRegisterActiveByGameId(agentId, gameId, bTime, eTime 
 				if scoreId == "" {
 					return userIds
 				}
-				if result, e := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+				if result, e := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 					ScrollId(scoreId).
 					Size(1000).
 					Query(query1).
@@ -282,7 +283,7 @@ func (esi *EsInfo) GetRegisterActiveByGameId(gameId, bTime, eTime int64) map[uin
 		}
 	}
 
-	if res, err := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+	if res, err := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 		Size(1000).
 		Query(query1).
 		Query(query2).
@@ -296,7 +297,7 @@ func (esi *EsInfo) GetRegisterActiveByGameId(gameId, bTime, eTime int64) map[uin
 				if scoreId == "" {
 					return userIds
 				}
-				if result, e := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+				if result, e := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 					ScrollId(scoreId).
 					Size(1000).
 					Query(query1).
@@ -341,7 +342,7 @@ func (esi *EsInfo) GetAllRegisterActive(bTime, eTime int64) map[uint32]bool {
 		}
 	}
 
-	if res, err := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+	if res, err := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 		Size(1000).
 		Query(query1).
 		Query(query2).
@@ -354,7 +355,7 @@ func (esi *EsInfo) GetAllRegisterActive(bTime, eTime int64) map[uint32]bool {
 				if scoreId == "" {
 					return userIds
 				}
-				if result, e := esi.es.Scroll("pp_gp_settlement").Scroll("30s").
+				if result, e := esi.es.Scroll(esindex.Settlement()).Scroll("30s").
 					ScrollId(scoreId).
 					Size(1000).
 					Query(query1).
@@ -388,7 +389,7 @@ func (esi *EsInfo) GetAllRegisterActiveByGameId(bTime, eTime, gameId int64) int6
 		query3 := query.Must(elastic.NewRangeQuery("playedDate").Lt(eTime * 1000))
 		query4 := query.Must(elastic.NewRangeQuery("playedDate").Gte(bTime * 1000))
 		queryAggs := elastic.NewCardinalityAggregation().Field("userId")
-		if res, e := esi.es.Search().Size(0).Index().Index("pp_gp_settlement").
+		if res, e := esi.es.Search().Size(0).Index().Index(esindex.Settlement()).
 			Query(query1).
 			Query(query3).
 			Query(query4).
@@ -406,7 +407,7 @@ func (esi *EsInfo) GetAllRegisterActiveByGameId(bTime, eTime, gameId int64) int6
 		query2 := query.Must(elastic.NewRangeQuery("playedDate").Gte(bTime * 1000))
 		queryAggs := elastic.NewCardinalityAggregation().Field("userId")
 		zap.L().Debug("查询所有活跃", zap.Any("bTimg", bTime), zap.Any("eTime", eTime))
-		if res, e := esi.es.Search().Size(0).Index().Index("pp_gp_settlement").
+		if res, e := esi.es.Search().Size(0).Index().Index(esindex.Settlement()).
 			Query(query1).
 			Query(query2).
 			Aggregation("count", queryAggs).
@@ -434,7 +435,7 @@ func (esi *EsInfo) GetAgentEffProByGameId(agentId, gameId, bTime, eTime int64) (
 
 	aggsEff := elastic.NewSumAggregation().Field("bet")
 	aggsPro := elastic.NewSumAggregation().Field("win")
-	if res, e := esi.es.Search().Index().Size(0).Index("pp_gp_settlement").
+	if res, e := esi.es.Search().Index().Size(0).Index(esindex.Settlement()).
 		Query(query1).
 		Query(query2).
 		Query(query3).
@@ -461,7 +462,7 @@ func (esi *EsInfo) GetEffProByGameId(gameId, bTime, eTime int64) (decimal.Decima
 	query5 := query.Must(elastic.NewRangeQuery("isTourist").Lte(0))
 	aggsEff := elastic.NewSumAggregation().Field("bet")
 	aggsPro := elastic.NewSumAggregation().Field("win")
-	if res, e := esi.es.Search().Index().Size(0).Index("pp_gp_settlement").
+	if res, e := esi.es.Search().Index().Size(0).Index(esindex.Settlement()).
 		Query(query2).
 		Query(query3).
 		Query(query4).
@@ -486,7 +487,7 @@ func (esi *EsInfo) GetAllEffPro(bTime, eTime int64) (decimal.Decimal, decimal.De
 	query5 := query.Must(elastic.NewRangeQuery("isTourist").Lte(0))
 	aggsEff := elastic.NewSumAggregation().Field("bet")
 	aggsPro := elastic.NewSumAggregation().Field("win")
-	if res, e := esi.es.Search().Index().Size(0).Index("pp_gp_settlement").
+	if res, e := esi.es.Search().Index().Size(0).Index(esindex.Settlement()).
 		Query(query3).
 		Query(query4).
 		Query(query5).
@@ -509,7 +510,7 @@ func (esi *EsInfo) GetAgentBetsCountByGameId(agentId, gameId, bTime, eTime int64
 	query3 := query.Must(elastic.NewRangeQuery("playedDate").Lt(eTime * 1000))
 	query4 := query.Must(elastic.NewRangeQuery("playedDate").Gte(bTime * 1000))
 	query5 := query.Must(elastic.NewRangeQuery("isTourist").Lte(0))
-	if res, e := esi.es.Count().Index().Index("pp_gp_settlement").
+	if res, e := esi.es.Count().Index().Index(esindex.Settlement()).
 		Query(query1).
 		Query(query2).
 		Query(query3).
@@ -528,7 +529,7 @@ func (esi *EsInfo) GetBetsCountByGameId(gameId, bTime, eTime int64) int64 {
 	query3 := query.Must(elastic.NewRangeQuery("playedDate").Lt(eTime * 1000))
 	query4 := query.Must(elastic.NewRangeQuery("playedDate").Gte(bTime * 1000))
 	query5 := query.Must(elastic.NewRangeQuery("isTourist").Lte(0))
-	if res, e := esi.es.Count().Index().Index("pp_gp_settlement").
+	if res, e := esi.es.Count().Index().Index(esindex.Settlement()).
 		Query(query2).
 		Query(query3).
 		Query(query4).
@@ -545,7 +546,7 @@ func (esi *EsInfo) GetAllBetsCount(bTime, eTime int64) int64 {
 	query3 := query.Must(elastic.NewRangeQuery("playedDate").Lt(eTime * 1000))
 	query4 := query.Must(elastic.NewRangeQuery("playedDate").Gte(bTime * 1000))
 	query5 := query.Must(elastic.NewRangeQuery("isTourist").Lte(0))
-	if res, e := esi.es.Count().Index().Index("pp_gp_settlement").
+	if res, e := esi.es.Count().Index().Index(esindex.Settlement()).
 		Query(query3).
 		Query(query4).
 		Query(query5).
@@ -644,7 +645,7 @@ func (esi *EsInfo) GetProRank(bTime, eTime uint32, isAsc bool) []*config.RankRes
 		OrderByAggregation("pro", isAsc).
 		SubAggregation("eff", aggsEff).
 		SubAggregation("pro", aggsPro)
-	if res, e := esi.es.Search().Index().Size(0).Index("pp_gp_settlement").
+	if res, e := esi.es.Search().Index().Size(0).Index(esindex.Settlement()).
 		Query(query2).
 		Query(query3).
 		Query(query5).
@@ -688,7 +689,7 @@ func (esi *EsInfo) GetAgentProRank(agentId, bTime, eTime uint32, isAsc bool) []*
 		OrderByAggregation("pro", isAsc).
 		SubAggregation("eff", aggsEff).
 		SubAggregation("pro", aggsPro)
-	if res, e := esi.es.Search().Index().Size(0).Index("pp_gp_settlement").
+	if res, e := esi.es.Search().Index().Size(0).Index(esindex.Settlement()).
 		Query(query1).
 		Query(query2).
 		Query(query3).

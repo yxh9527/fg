@@ -4,6 +4,7 @@ import (
 	"app/config"
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"app/tables/player"
 	"context"
 	"crypto/md5"
@@ -351,7 +352,7 @@ func (d *LotteryService) BulkPoolLog(data []*view.PoolLogItem) error {
 	bulkService := d.es.Client.Bulk()
 	records := make([]elastic.BulkableRequest, 0)
 	for _, req := range data {
-		records = append(records, elastic.NewBulkIndexRequest().Index("pp_pool_record_log").Doc(req))
+		records = append(records, elastic.NewBulkIndexRequest().Index(esindex.PoolRecordLog()).Doc(req))
 	}
 	bulkService.Add(records...)
 	_, err := bulkService.Do(context.Background())

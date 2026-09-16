@@ -1,9 +1,10 @@
-package v2
+﻿package v2
 
 import (
 	"app/config"
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"app/tables/manager"
 	"context"
 	"fmt"
@@ -488,7 +489,7 @@ func ExportAgentData(ctx *gin.Context) {
 	query1 := elastic.NewRangeQuery("playedDate").Gte(startTime * 1000).Lt(endTime * 1000)
 	query2 := elastic.NewRangeQuery("isTourist").Lte(0)
 	boolQuery := elastic.NewBoolQuery().Must(query1, query2)
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").Query(boolQuery).Aggregation("webId", webIdAggs).Size(0).Do(context.Background())
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).Query(boolQuery).Aggregation("webId", webIdAggs).Size(0).Do(context.Background())
 	if err != nil {
 		zap.L().Error("获取注单打点数据异常", zap.Any("err", err))
 		return
@@ -583,7 +584,7 @@ func ReportFormList(ctx *gin.Context) {
 	gameAggs.SubAggregation("chipsTotal", elastic.NewSumAggregation().Field("chipsTotal"))
 	gameAggs.SubAggregation("docCount", elastic.NewSumAggregation().Field("doc_count"))
 	aggs.SubAggregation("gameId", gameAggs)
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Aggregation("agentId", aggs).
@@ -677,7 +678,7 @@ func GetTimeRangeActiveAgent(startTime, endTime, webId int64) []int64 {
 		querys = append(querys, elastic.NewTermQuery("webId", webId))
 	}
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Pretty(true).
@@ -742,7 +743,7 @@ func LoadAgents(webId, startTime, endTime, page, pageSize, agentId int64, result
 	aggs.SubAggregation("revenueTotal", elastic.NewSumAggregation().Field("revenueTotal"))
 	aggs.SubAggregation("chipsTotal", elastic.NewSumAggregation().Field("chipsTotal"))
 	aggs.SubAggregation("docCount", elastic.NewSumAggregation().Field("doc_count"))
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Aggregation("agentId", aggs).
@@ -826,7 +827,7 @@ func AggsAllWithAgent(startTime, endTime, webId, agentId int64) (map[string]floa
 		querys = append(querys, elastic.NewTermQuery("webId", webId))
 	}
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Aggregation("effectiveBetsTotal", elastic.NewSumAggregation().Field("effectiveBetsTotal")).
@@ -925,7 +926,7 @@ func GetAgentGameDataAggs(ctx *gin.Context) {
 	aggs.SubAggregation("revenueTotal", elastic.NewSumAggregation().Field("revenueTotal"))
 	aggs.SubAggregation("chipsTotal", elastic.NewSumAggregation().Field("chipsTotal"))
 	aggs.SubAggregation("docCount", elastic.NewSumAggregation().Field("doc_count"))
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Aggregation("gameId", aggs).
@@ -1028,7 +1029,7 @@ func AgentReportFormList(ctx *gin.Context) {
 	gameAggs.SubAggregation("chipsTotal", elastic.NewSumAggregation().Field("chipsTotal"))
 	gameAggs.SubAggregation("docCount", elastic.NewSumAggregation().Field("doc_count"))
 	aggs.SubAggregation("gameId", gameAggs)
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Aggregation("agentId", aggs).
@@ -1142,7 +1143,7 @@ func ReportFormHistory(ctx *gin.Context) {
 		querys = append(querys, elastic.NewTermsQuery("gameId", ids...))
 	}
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_data_analysis_range").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysisRange()).
 		Sort("endTime", false).
 		Size(pageSize).
 		From(offset).
@@ -1190,7 +1191,7 @@ func GovernUserRecord(ctx *gin.Context) {
 		querys = append(querys, elastic.NewTermQuery("userId", userId))
 	}
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_user_controller").
+	resp, err := dao.Es().Search().Index(esindex.UserController()).
 		Query(boolQuery).
 		Sort("createTime", false).
 		Pretty(true).
@@ -1235,7 +1236,7 @@ func GovernUser(ctx *gin.Context) {
 	dao.RedisIns().Client.HSet(context.Background(), "user_ctl", strUserId, tmpStr)
 	dao.Mysql().Manager.Model(manager.User{}).Debug().Exec("update gp_user set isCtl=1,controlNumber=controlNumber+1 where id=?", userId)
 	uc.CreateTime = time.Now().Unix()
-	dao.Es().Index().Index("pp_user_controller").BodyJson(uc).Do(context.Background())
+	dao.Es().Index().Index(esindex.UserController()).BodyJson(uc).Do(context.Background())
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
 }
 
@@ -1258,7 +1259,7 @@ func AgentLineChart(ctx *gin.Context) {
 		querys = append(querys, elastic.NewTermQuery("gameId", gameId))
 	}
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_data_analysis_range").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysisRange()).
 		Size(1000).
 		Query(boolQuery).
 		From(int(page * 1000)).

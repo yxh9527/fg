@@ -1,8 +1,9 @@
-package v2
+﻿package v2
 
 import (
 	"app/entity"
 	"app/entity/view"
+	"app/esindex"
 	"app/tables/manager"
 	"context"
 	"encoding/json"
@@ -88,7 +89,7 @@ func getAgentDataAggs(startTime, endTime, agentId, webId int64) []*view.AgentInf
 	aggs = aggs.SubAggregation("revenueTotal", elastic.NewSumAggregation().Field("revenueTotal"))
 	aggs = aggs.SubAggregation("chipsTotal", elastic.NewSumAggregation().Field("chipsTotal"))
 	aggs = aggs.SubAggregation("docCount", elastic.NewSumAggregation().Field("doc_count"))
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Aggregation("agentId", aggs).
@@ -184,7 +185,7 @@ func agentGameDataAggs(startTime, endTime int64) []*elastic.AggregationBucketKey
 	gameAggs = gameAggs.SubAggregation("revenueTotal", elastic.NewSumAggregation().Field("revenueTotal"))
 	gameAggs = gameAggs.SubAggregation("docCount", elastic.NewSumAggregation().Field("doc_count"))
 	aggs.SubAggregation("games", gameAggs)
-	resp, err := dao.Es().Search().Index("pp_data_analysis").
+	resp, err := dao.Es().Search().Index(esindex.DataAnalysis()).
 		Size(0).
 		Query(boolQuery).
 		Aggregation("agents", aggs).
@@ -406,7 +407,7 @@ func UserChart(ctx *gin.Context) {
 	querys = append(querys, elastic.NewRangeQuery("isTourist").Lte(0))
 	querys = append(querys, elastic.NewTermQuery("userId", userId))
 	boolQuery := elastic.NewBoolQuery().Must(querys...)
-	resp, err := dao.Es().Search().Index("pp_gp_settlement").
+	resp, err := dao.Es().Search().Index(esindex.Settlement()).
 		FetchSourceContext(elastic.NewFetchSourceContext(true).Include("bet", "exBet", "exWin", "win", "playedDate", "symbol")).
 		Size(10000).
 		Query(boolQuery).
