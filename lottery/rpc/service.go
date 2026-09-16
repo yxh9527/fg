@@ -382,7 +382,7 @@ func (d *LotteryService) updatePlayerCurrency(id uint32, delta int64) (int64, se
 	return newCurrency, services.ErrorCode_OK
 }
 
-func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, ur *entity.UserRecordInfo, req *services.SlotsLotteryReq) (int64, bool, services.ErrorCode) {
+func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, ur *entity.UserRecordInfo, req *slotsLotteryReq) (int64, bool, services.ErrorCode) {
 	var newCurrency int64 = 0
 	award, _ := decimal.NewFromString(req.ProfitLoss)
 	bet, _ := decimal.NewFromString(req.Bet)
@@ -458,7 +458,7 @@ func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, ur *en
 	return newCurrency, true, services.ErrorCode_OK
 }
 
-func (d *LotteryService) Complete(webId uint32, exchange decimal.Decimal, ur *entity.UserRecordInfo, req *services.SlotsLotteryReq) (int64, bool, services.ErrorCode) {
+func (d *LotteryService) Complete(webId uint32, exchange decimal.Decimal, ur *entity.UserRecordInfo, req *slotsLotteryReq) (int64, bool, services.ErrorCode) {
 	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
 	if eGame.Number != int(req.GameId) {
 		zap.L().Error("获取Pool配置文件失败", zap.Any("roundId", ur.Common.RecordId), zap.Any("req", req))
@@ -591,12 +591,12 @@ func ConvertRecord(agentId, userId uint32, recordId, currencyType, symbol, accou
 	return record
 }
 
-func (d *LotteryService) SlotsLottery(_ context.Context, req *services.SlotsLotteryReq) (resp *services.SlotsLotteryResp, err error) {
+func (d *LotteryService) SlotsLottery(_ context.Context, req *slotsLotteryReq) (resp *slotsLotteryResp, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			zap.L().Error("panic", zap.Any("err", rec))
 			if resp == nil {
-				resp = &services.SlotsLotteryResp{}
+				resp = &slotsLotteryResp{}
 			}
 			resp.Result = false
 			resp.Code = services.ErrorCode_SYSTEM_ERROR
@@ -605,7 +605,7 @@ func (d *LotteryService) SlotsLottery(_ context.Context, req *services.SlotsLott
 		}
 	}()
 
-	resp = &services.SlotsLotteryResp{Code: services.ErrorCode_OK}
+	resp = &slotsLotteryResp{Code: services.ErrorCode_OK}
 	bet, _ := decimal.NewFromString(req.Bet)
 	resp.Result = true
 	resp.Code = services.ErrorCode_OK
@@ -690,5 +690,623 @@ func (d *LotteryService) SlotsLottery(_ context.Context, req *services.SlotsLott
 		resp.NewCurrency = decimal.NewFromFloat(float64(newCurrency) / 100).String()
 	}
 
+	return resp, nil
+}
+
+func currencyFromCent(v int64) decimal.Decimal {
+	return decimal.NewFromInt(v).Div(decimal.NewFromInt(100))
+}
+
+func (d *LotteryService) rollbackPoolChange(agentId, userId uint32, symbol, currencyType, recordId string, bet, award, rate decimal.Decimal) {
+	dao.CacheIns().ChangePool(int64(agentId), int32(userId), symbol, currencyType, recordId, bet.Neg(), award.Neg(), rate)
+}
+
+func (d *LotteryService) deductBet(agentId, userId uint32, exchange decimal.Decimal, symbol, recordId, betStr, currencyType string) (decimal.Decimal, bool) {
+	var newCurrency int64 = 0
+	bet, _ := decimal.NewFromString(betStr)
+	exBet := bet.Mul(exchange)
+	pc := config.CfgIns.GetPoolCfg(int64(agentId), symbol)
+	if pc == nil {
+		zap.L().Error("获取Pool配置文件失败", zap.Any("roundId", recordId), zap.Any("pc", pc))
+		return decimal.Zero, false
+	}
+	zap.L().Debug("deductBet:开始下注", zap.Any("agentId", agentId),
+		zap.Any("symbol", symbol),
+		zap.Any("roundId", recordId),
+		zap.Any("playerId", userId),
+		zap.Any("bet", bet),
+		zap.Any("currenType", currencyType))
+	if bet.GreaterThan(decimal.Zero) {
+		//首先扣减用户金额
+		tmp, err := d.updatePlayerCurrency(userId, (bet.Neg()).Mul(decimal.NewFromInt(100)).IntPart())
+		if err != services.ErrorCode_OK {
+			zap.L().Debug("deductBet:下注失败,更新玩家积分失败",
+				zap.Any("agentId", agentId),
+				zap.Any("symbol", symbol),
+				zap.Any("roundId", recordId),
+				zap.Any("playerId", userId),
+				zap.Any("bet", bet),
+				zap.Any("currenType", currencyType))
+			return decimal.Zero, false
+		}
+		newCurrency = tmp
+	}
+	//
+	nc := currencyFromCent(newCurrency)
+	dao.CacheIns().ChangePool(int64(agentId), int32(userId), symbol, currencyType, recordId, exBet, decimal.Zero, pc.Pool[1].Revenue)
+	user := dao.CacheIns().GetUser(int64(agentId), int64(userId))
+	if user != nil && user.IsTourist == 0 {
+		if bet.GreaterThan(decimal.Zero) {
+			//下注流水
+			d.SaveBill(uint32(agentId), userId, bet.Neg(), nc.Truncate(2).InexactFloat64(), symbol, "下注", currencyType, recordId)
+		}
+		//打点水池记录
+		d.pcr.Record(int64(agentId), symbol, dao.CacheIns().GetPool(int64(agentId), symbol))
+	}
+
+	zap.L().Debug("deductBet:下注成功",
+		zap.Any("agentId", agentId),
+		zap.Any("symbol", symbol),
+		zap.Any("roundId", recordId),
+		zap.Any("playerId", userId))
+	return nc, true
+}
+
+func (d *LotteryService) refundBet(agentId, userId uint32, exchange decimal.Decimal, symbol, recordId, betStr, currencyType string) (decimal.Decimal, bool) {
+	var newCurrency int64 = 0
+	bet, _ := decimal.NewFromString(betStr)
+	exBet := bet.Mul(exchange)
+	pc := config.CfgIns.GetPoolCfg(int64(agentId), symbol)
+	if pc == nil {
+		zap.L().Error("获取Pool配置文件失败", zap.Any("roundId", recordId), zap.Any("pc", pc))
+		return decimal.Zero, false
+	}
+	zap.L().Debug("refundBet:回退", zap.Any("agentId", agentId),
+		zap.Any("symbol", symbol),
+		zap.Any("roundId", recordId),
+		zap.Any("playerId", userId),
+		zap.Any("bet", bet),
+		zap.Any("currenType", currencyType))
+	if bet.GreaterThan(decimal.Zero) {
+		//首先扣减用户金额
+		tmp, err := d.updatePlayerCurrency(userId, bet.Mul(decimal.NewFromInt(100)).IntPart())
+		if err != services.ErrorCode_OK {
+			zap.L().Debug("refundBet:回退失败,更新玩家积分失败",
+				zap.Any("agentId", agentId),
+				zap.Any("symbol", symbol),
+				zap.Any("roundId", recordId),
+				zap.Any("playerId", userId),
+				zap.Any("bet", bet),
+				zap.Any("currenType", currencyType))
+			return decimal.Zero, false
+		}
+		newCurrency = tmp
+	}
+	//
+	nc := currencyFromCent(newCurrency)
+	dao.CacheIns().ChangePool(int64(agentId), int32(userId), symbol, currencyType, recordId, exBet.Abs().Neg(), decimal.Zero, pc.Pool[1].Revenue)
+	user := dao.CacheIns().GetUser(int64(agentId), int64(userId))
+	if user != nil && user.IsTourist == 0 {
+		if bet.GreaterThan(decimal.Zero) {
+			//下注流水
+			d.SaveBill(uint32(agentId), userId, bet.Neg(), nc.Truncate(2).InexactFloat64(), symbol, "回退", currencyType, recordId)
+		}
+		//打点水池记录
+		d.pcr.Record(int64(agentId), symbol, dao.CacheIns().GetPool(int64(agentId), symbol))
+	}
+
+	zap.L().Debug("refundBet:回退成功",
+		zap.Any("agentId", agentId),
+		zap.Any("symbol", symbol),
+		zap.Any("roundId", recordId),
+		zap.Any("playerId", userId))
+	return nc, true
+}
+
+func (d *LotteryService) PoolAmountResult(_ context.Context, req *services.PoolAmountResultReq) (resp *services.PoolAmountResultResp, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			zap.L().Error("panic", zap.Any("err", err))
+		}
+	}()
+	resp = &services.PoolAmountResultResp{Code: services.ErrorCode_OK}
+	eAgent := dao.AgentManagerIns().Get(int64(req.AgentId))
+	if eAgent == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Debug("PoolAmountResult:获取代理信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
+	if eGame == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Debug("PoolAmountResult:获取游戏信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	pc := config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
+	if pc == nil {
+		zap.L().Error("PoolAmountResult:获取Pool配置文件失败", zap.Any("pc", pc))
+		return resp, nil
+	}
+	exchange, ok := config.CfgIns.GetExchange(req.CurrencyType)
+	if !ok {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		zap.L().Error("PoolAmountResult:获取汇率配置失败",
+			zap.Any("currencyType", req.CurrencyType),
+			zap.Any("agentId", req.AgentId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	p := dao.CacheIns().GetPool(int64(req.AgentId), eGame.ConfName)
+	//换算成对应币种的积分   cny->[currencyType]
+	resp.Currency = p.Div(exchange).Truncate(2).String()
+	return resp, nil
+}
+
+func (d *LotteryService) doSingleBet(req *singleBetReq) (resp *singleBetResp, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			zap.L().Error("panic", zap.Any("err", err))
+		}
+	}()
+	resp = &singleBetResp{Code: services.ErrorCode_OK}
+	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
+	if eGame == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doSingleBet:游戏被冻结",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", req.RoundID),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	zap.L().Debug("doSingleBet", zap.Any("symbol", eGame.ConfName), zap.Any("req", req))
+	bet, _ := decimal.NewFromString(req.Bet)
+	win, _ := decimal.NewFromString(req.Win)
+	// FG：win 可为负（玩家净亏损），仅 >0 走派奖分支；<=0 走下注/完局分支记玩家亏损。
+	eAgent := dao.AgentManagerIns().Get(int64(req.AgentId))
+	if eAgent == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doSingleBet:获取代理信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", req.RoundID),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	user := dao.CacheIns().GetUser(int64(req.AgentId), int64(req.UserId))
+	if user == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doSingleBet:获取用户信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", req.RoundID),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	pc := config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
+	if pc == nil {
+		zap.L().Error("doSingleBet:获取Pool配置文件失败", zap.Any("roundId", req.RoundID), zap.Any("pc", pc))
+		return resp, nil
+	}
+	exchange, ok := config.CfgIns.GetExchange(req.CurrencyType)
+	if !ok {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		zap.L().Error("doSingleBet:获取汇率配置失败",
+			zap.Any("currencyType", req.CurrencyType),
+			zap.Any("roundId", req.RoundID),
+			zap.Any("agentId", req.AgentId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	newCurrency := decimal.Zero
+
+	if win.GreaterThan(decimal.Zero) {
+		revenue := bet.Mul(exchange).Mul(pc.Pool[1].Revenue).Truncate(4)
+		//判断pool是否足够 足够立马扣除
+		if !dao.CacheIns().CheckPoolWithChange(int64(req.AgentId), eGame.ConfName, req.RoundID, req.CurrencyType, win.Mul(exchange), bet.Mul(exchange), revenue, req.UserId) {
+			//不够赔 不可以开
+			resp.Code = services.ErrorCode_NO_ENOUGH_POOL_MONEY
+			return resp, nil
+		}
+		var tmp int64 = 0
+		var code services.ErrorCode = services.ErrorCode_OK
+		tmp, code = d.updatePlayerCurrency(req.UserId, bet.Neg().Mul(decimal.NewFromInt(100)).IntPart())
+		if code != services.ErrorCode_OK {
+			d.rollbackPoolChange(req.AgentId, req.UserId, eGame.ConfName, req.CurrencyType, req.RoundID, bet.Mul(exchange), win.Mul(exchange), pc.Pool[1].Revenue)
+			zap.L().Error("doSingleBet:更新玩家积分失败",
+				zap.Any("agentId", req.AgentId),
+				zap.Any("symbol", eGame.ConfName),
+				zap.Any("roundId", req.RoundID),
+				zap.Any("playerId", req.UserId),
+				zap.Any("bet", bet),
+				zap.Any("currenType", req.CurrencyType))
+			resp.Code = services.ErrorCode_SYSTEM_ERROR
+			return resp, nil
+		}
+		if bet.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
+			nc := currencyFromCent(tmp)
+			d.SaveBill(uint32(req.AgentId), req.UserId, bet.Neg(), nc.Truncate(2).InexactFloat64(), eGame.ConfName, "下注", req.CurrencyType, req.RoundID)
+		}
+
+		tmp, code = d.updatePlayerCurrency(req.UserId, win.Mul(decimal.NewFromInt(100)).IntPart())
+		if code != services.ErrorCode_OK {
+			d.rollbackPoolChange(req.AgentId, req.UserId, eGame.ConfName, req.CurrencyType, req.RoundID, bet.Mul(exchange), win.Mul(exchange), pc.Pool[1].Revenue)
+			zap.L().Error("doSingleBet:更新玩家积分失败",
+				zap.Any("agentId", req.AgentId),
+				zap.Any("symbol", eGame.ConfName),
+				zap.Any("roundId", req.RoundID),
+				zap.Any("playerId", req.UserId),
+				zap.Any("win", win),
+				zap.Any("currenType", req.CurrencyType))
+			resp.Code = services.ErrorCode_SYSTEM_ERROR
+			return resp, nil
+		}
+
+		//新余额
+		nc := currencyFromCent(tmp)
+		if win.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
+			d.SaveBill(uint32(req.AgentId), req.UserId, win, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "结算", req.CurrencyType, req.RoundID)
+		}
+		resp.Currency = nc.String()
+		newCurrency = nc
+	} else {
+		if bet.GreaterThan(decimal.Zero) {
+			if nc, ok := d.deductBet(req.AgentId, req.UserId, exchange, eGame.ConfName, req.RoundID, req.Bet, req.CurrencyType); ok {
+				resp.Currency = nc.Truncate(2).String()
+				newCurrency = nc
+			} else {
+				resp.Code = services.ErrorCode_SYSTEM_ERROR
+			}
+		}
+	}
+	if user.IsTourist == 0 {
+		if len(req.Result) > 0 {
+			ur := &entity.UserRecordInfo{}
+			err = jsoniter.UnmarshalFromString(req.Result, ur)
+			if err != nil {
+				zap.L().Error("doSingleBet:获取注单信息失败",
+					zap.Any("userId", req.UserId),
+					zap.Any("symbol", eGame.ConfName),
+					zap.Any("agentId", req.AgentId),
+					zap.Any("state", req.Result))
+				resp.Code = services.ErrorCode_SYSTEM_ERROR
+				return resp, nil
+			}
+			record := ConvertRecord(
+				uint32(req.AgentId),
+				req.UserId,
+				req.RoundID,
+				req.CurrencyType,
+				eGame.ConfName,
+				user.Account,
+				req.Result,
+				newCurrency,
+				uint32(eAgent.WebId),
+				true,
+				ur.BetRecord.TotalBetGold,
+				win.InexactFloat64())
+			d.SaveRecord(record)
+		}
+
+		if req.Complete {
+			dao.CacheIns().Complete(int64(req.AgentId), req.UserId, eGame.ConfName, bet.Mul(exchange), win.Mul(exchange), decimal.Zero)
+		}
+
+		//打点水池记录
+		d.pcr.Record(int64(req.AgentId), eGame.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), eGame.ConfName))
+	}
+	return resp, nil
+}
+
+func (d *LotteryService) doMultiBet(req *multiBetReq) (resp *multiBetResp, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			zap.L().Error("panic", zap.Any("err", err))
+		}
+	}()
+	resp = &multiBetResp{Code: services.ErrorCode_OK}
+	roundId := fmt.Sprintf("%s#%d", req.RoundID, req.UserId)
+	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
+	if eGame == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doMultiBet:获取游戏信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", roundId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	zap.L().Debug("doMultiBet", zap.Any("symbol", eGame.ConfName), zap.Any("req", req))
+	initBet, _ := decimal.NewFromString(req.InitBet)
+
+	eAgent := dao.AgentManagerIns().Get(int64(req.AgentId))
+	if eAgent == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doMultiBet:获取代理信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", roundId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	account := dao.CacheIns().GetPlayerAccount(int64(req.AgentId), int64(req.UserId))
+	if account == "" {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doMultiBet:获取账号信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", roundId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	pc := config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
+	if pc == nil {
+		zap.L().Error("doMultiBet:获取Pool配置文件失败", zap.Any("roundId", roundId), zap.Any("pc", pc))
+		return resp, nil
+	}
+	exchange, ok := config.CfgIns.GetExchange(req.CurrencyType)
+	if !ok {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		zap.L().Error("doMultiBet:获取汇率配置失败",
+			zap.Any("currencyType", req.CurrencyType),
+			zap.Any("roundId", roundId),
+			zap.Any("agentId", req.AgentId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	if initBet.Abs().GreaterThan(decimal.Zero) {
+		if nc, ok := d.deductBet(req.AgentId, req.UserId, exchange, eGame.ConfName, roundId, req.InitBet, req.CurrencyType); ok {
+			resp.Currency = nc.Truncate(2).String()
+		} else {
+			zap.L().Error("doMultiBet:获取汇率配置失败",
+				zap.Any("currencyType", req.CurrencyType),
+				zap.Any("roundId", roundId),
+				zap.Any("agentId", req.AgentId),
+				zap.Any("playerId", req.UserId),
+				zap.Any("gameId", req.GameId))
+		}
+	}
+	return resp, nil
+}
+
+func (d *LotteryService) doMultiRefund(req *multiRefundReq) (resp *multiRefundResp, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			zap.L().Error("panic", zap.Any("err", err))
+		}
+	}()
+	resp = &multiRefundResp{Code: services.ErrorCode_OK}
+	roundId := fmt.Sprintf("%s#%d", req.RoundID, req.UserId)
+	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
+	if eGame == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doMultiRefund:获取游戏信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", roundId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	zap.L().Debug("doMultiRefund", zap.Any("symbol", eGame.ConfName), zap.Any("req", req))
+	eAgent := dao.AgentManagerIns().Get(int64(req.AgentId))
+	if eAgent == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doMultiRefund:获取代理信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", roundId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	account := dao.CacheIns().GetPlayerAccount(int64(req.AgentId), int64(req.UserId))
+	if account == "" {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		zap.L().Error("doMultiRefund:获取账号信息失败",
+			zap.Any("agentId", req.AgentId),
+			zap.Any("roundId", roundId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+	pc := config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
+	if pc == nil {
+		zap.L().Error("doMultiRefund:获取Pool配置文件失败", zap.Any("roundId", roundId), zap.Any("pc", pc))
+		return resp, nil
+	}
+	exchange, ok := config.CfgIns.GetExchange(req.CurrencyType)
+	if !ok {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		zap.L().Error("doMultiRefund:获取汇率配置失败",
+			zap.Any("currencyType", req.CurrencyType),
+			zap.Any("roundId", roundId),
+			zap.Any("agentId", req.AgentId),
+			zap.Any("playerId", req.UserId),
+			zap.Any("gameId", req.GameId))
+		return resp, nil
+	}
+
+	if nc, ok := d.refundBet(req.AgentId, req.UserId, exchange, eGame.ConfName, roundId, req.Bet, req.CurrencyType); ok {
+		resp.Currency = nc.Truncate(2).String()
+	}
+	return resp, nil
+}
+
+func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleResp, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			zap.L().Error("panic", zap.Any("err", err))
+		}
+	}()
+	resp = &multiSettleResp{
+		Code:      services.ErrorCode_SYSTEM_ERROR,
+		Currencys: make([]*newCurrencyItem, 0),
+	}
+	if len(req.Records) <= 0 {
+		zap.L().Error("doMultiSettle:批量结算", zap.Any("record count", len(req.Records)))
+		return resp, nil
+	}
+	newCurrencys := make(map[uint32]*newCurrencyItem)
+	deltas := make(map[uint32]int64)
+	totalWin, _ := decimal.NewFromString(req.TotalWin)
+	exchange, ok := config.CfgIns.GetExchange(req.Records[0].CurrencyType)
+	if !ok {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		zap.L().Error("doMultiSettle:获取汇率配置失败",
+			zap.Any("currencyType", req.Records[0].CurrencyType),
+			zap.Any("agentId", req.Records[0].AgentId),
+			zap.Any("playerId", req.Records[0].UserId),
+			zap.Any("gameId", req.Records[0].GameId))
+		return resp, nil
+	}
+	totalWin = totalWin.Mul(exchange)
+	agentId, gameId := int(req.Records[0].AgentId), int(req.Records[0].GameId)
+	//首先判断水池是否足够赔付
+	for _, item := range req.Records {
+		user := dao.CacheIns().GetUser(int64(item.AgentId), int64(item.UserId))
+		if user == nil || user.IsTourist != 0 {
+			continue
+		}
+		win, _ := decimal.NewFromString(item.Win)
+		if win.LessThanOrEqual(decimal.Zero) {
+			continue
+		}
+	}
+
+	// 百人类的 可以这么写 没有并发问题
+	game := dao.GamesManagerIns().GetById(int64(gameId))
+	if game == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		return resp, nil
+	}
+
+	zap.L().Debug("doMultiSettle:批量结算", zap.Any("symbol", game.ConfName), zap.Any("record count", len(req.Records)), zap.Any("req", req))
+
+	pool := dao.CacheIns().GetPool(int64(agentId), game.ConfName)
+	if pool.LessThan(totalWin) {
+		zap.L().Debug("doMultiSettle:赔付失败", zap.Any("req", req))
+		resp.Code = services.ErrorCode_NO_ENOUGH_POOL_MONEY
+		return resp, nil
+	}
+	//批量更新积分
+	for _, item := range req.Records {
+		roundId := fmt.Sprintf("%s#%d", item.RoundID, item.UserId)
+		win, _ := decimal.NewFromString(item.Win)
+		game := dao.GamesManagerIns().GetById(int64(item.GameId))
+		bet, _ := decimal.NewFromString(item.Bet)
+		if win.GreaterThan(decimal.Zero) {
+			win = win.Add(bet)
+		} else {
+			win = decimal.Zero
+		}
+		//换算成redis里面的单位 这里不能累加 一个玩家 同一局游戏 只能产生一条游戏记录 如果出现多个游戏记录就是bug  不能累加
+		deltas[item.UserId] = win.Mul(decimal.NewFromInt(100)).Truncate(0).IntPart()
+		if len(deltas) >= 100 {
+			tmp, err := dao.RedisIns().BatchUpdatePlayerCurrencys(deltas)
+			if err != nil {
+				zap.L().Error("doMultiSettle:更新玩家积分失败",
+					zap.Any("agentId", item.AgentId),
+					zap.Any("symbol", game.ConfName),
+					zap.Any("roundId", roundId),
+					zap.Any("playerId", item.UserId),
+					zap.Any("win", win),
+					zap.Any("currenType", item.CurrencyType))
+				resp.Code = services.ErrorCode_SYSTEM_ERROR
+				return resp, nil
+			}
+			for k, v := range tmp {
+				newCurrencys[k] = &newCurrencyItem{UserId: k, Currency: decimal.NewFromInt(v).Div(decimal.NewFromInt(100)).Truncate(2).String()}
+			}
+			deltas = make(map[uint32]int64)
+		}
+	}
+	if len(deltas) > 0 {
+		tmp, err := dao.RedisIns().BatchUpdatePlayerCurrencys(deltas)
+		if err != nil {
+			zap.L().Error("doMultiSettle:更新玩家积分失败", zap.Any("data", deltas))
+			resp.Code = services.ErrorCode_SYSTEM_ERROR
+			return resp, nil
+		}
+		for k, v := range tmp {
+			newCurrencys[k] = &newCurrencyItem{UserId: k, Currency: decimal.NewFromInt(v).Div(decimal.NewFromInt(100)).Truncate(2).String()}
+		}
+	}
+	//批量保存注单信息
+	for _, item := range req.Records {
+		roundId := fmt.Sprintf("%s#%d", item.RoundID, item.UserId)
+		exchange, ok := config.CfgIns.GetExchange(item.CurrencyType)
+		if !ok {
+			resp.Code = services.ErrorCode_SYSTEM_ERROR
+			zap.L().Error("doMultiSettle:获取汇率配置失败",
+				zap.Any("currencyType", item.CurrencyType),
+				zap.Any("roundId", roundId),
+				zap.Any("agentId", item.AgentId),
+				zap.Any("playerId", item.UserId),
+				zap.Any("gameId", item.GameId))
+			continue
+		}
+		agent := dao.AgentManagerIns().Get(int64(item.AgentId))
+		game := dao.GamesManagerIns().GetById(int64(item.GameId))
+		if game == nil || agent == nil {
+			resp.Code = services.ErrorCode_PARAMS_INVALID
+			continue
+		}
+		win, _ := decimal.NewFromString(item.Win)
+		account := dao.CacheIns().GetPlayerAccount(int64(item.AgentId), int64(item.UserId))
+		bet, _ := decimal.NewFromString(item.Bet)
+		if tmp := newCurrencys[item.UserId]; tmp != nil {
+			user := dao.CacheIns().GetUser(int64(item.AgentId), int64(item.UserId))
+			if user == nil || user.IsTourist != 0 {
+				continue
+			}
+			if win.GreaterThan(decimal.Zero) {
+				win = win.Add(bet)
+			} else {
+				win = decimal.Zero
+			}
+			//新余额
+			nc, _ := decimal.NewFromString(tmp.Currency)
+			defRevenue := decimal.NewFromFloat(dao.DefaultRevenue)
+			pc := config.CfgIns.GetPoolCfg(int64(item.AgentId), game.ConfName)
+			if pc != nil {
+				defRevenue = pc.Pool[1].Revenue
+			}
+			dao.CacheIns().ChangePool(int64(item.AgentId), int32(item.UserId), game.ConfName, item.CurrencyType, item.RoundID, decimal.Zero, win.Mul(exchange), defRevenue)
+			dao.CacheIns().Complete(int64(item.AgentId), item.UserId, game.ConfName, bet.Mul(exchange), win.Mul(exchange), defRevenue)
+			if win.GreaterThan(decimal.Zero) {
+				//下注流水
+				d.SaveBill(uint32(item.AgentId), item.UserId, win, nc.Truncate(2).InexactFloat64(), game.ConfName, "结算", item.CurrencyType, roundId)
+			}
+			newCurrencys[item.UserId] = &newCurrencyItem{UserId: item.UserId, Currency: nc.Truncate(2).String()}
+			if game.Number > 0 {
+				//增加结算注单
+				record := ConvertRecord(
+					uint32(item.AgentId),
+					item.UserId,
+					roundId,
+					item.CurrencyType,
+					game.ConfName,
+					account,
+					item.Log,
+					nc,
+					uint32(agent.WebId),
+					true,
+					bet.Truncate(2).InexactFloat64(),
+					win.Truncate(2).InexactFloat64())
+				d.SaveRecord(record)
+			}
+		}
+	}
+	resArr := make([]*newCurrencyItem, 0, 64)
+	for _, v := range newCurrencys {
+		resArr = append(resArr, v)
+	}
+	resp.Currencys = resArr
+	resp.Code = services.ErrorCode_OK
 	return resp, nil
 }

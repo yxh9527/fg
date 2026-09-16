@@ -25,8 +25,8 @@ var singleCtrl *SingleCtrlMgr = nil
 
 // 玩家数据对象
 type User struct {
-	TotalEffectBet decimal.Decimal //总有效投注 (lose)
-	TotalProfLoss  decimal.Decimal //总亏损     (win)
+	TotalEffectBet decimal.Decimal //总有效投注
+	TotalProfLoss  decimal.Decimal //玩家亏损累计（仅 award<0 时加 |award|）
 	Count          decimal.Decimal //下注局数
 	UpdateTime     int64           //更新时间
 	UserId         uint32          //玩家id
@@ -37,13 +37,41 @@ type User struct {
 
 // 游戏数据对象
 type Game struct {
-	TotalEffectBet decimal.Decimal //总有效投注 (win)
+	TotalEffectBet decimal.Decimal //总有效投注
 	TotalChips     decimal.Decimal //总打码    （下注金额||返奖金额）绝对值，谁大取谁 的总和
-	TotalProfLoss  decimal.Decimal //总亏损     (lose)
+	TotalProfLoss  decimal.Decimal //代理赔付累计（仅 award>0 时加 award，含预占）
 	TotalRevenue   decimal.Decimal //总税收
 	UpdateTime     int64           //更新时间
 	AgentId        int64           //代理id
 	Symbol         string          //游戏标识
+}
+
+// addGamePayout FG：仅 award>0 计入代理游戏总赔付。
+func addGamePayout(game *Game, award decimal.Decimal) {
+	if game == nil {
+		return
+	}
+	if award.GreaterThan(decimal.Zero) {
+		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
+	}
+}
+
+// addUserLoss FG：仅 award<0 计入玩家亏损，取绝对值。
+func addUserLoss(user *User, award decimal.Decimal) {
+	if user == nil {
+		return
+	}
+	if award.LessThan(decimal.Zero) {
+		user.TotalProfLoss = user.TotalProfLoss.Add(award.Abs().Truncate(4))
+	}
+}
+
+// positiveAward 水池预判只用正赔付，负 award（玩家亏损）不占赔付额度。
+func positiveAward(award decimal.Decimal) decimal.Decimal {
+	if award.GreaterThan(decimal.Zero) {
+		return award
+	}
+	return decimal.Zero
 }
 
 type Ctrl struct {
@@ -296,17 +324,20 @@ func (gcm *GameCacheMgr) Complete(agentId int64, userId uint32, symbol string, b
 			//bet作为有效打码
 			chips = bet
 		}
+		if chips.LessThan(decimal.Zero) {
+			chips = chips.Abs()
+		}
 		game.TotalChips = game.TotalChips.Add(chips.Truncate(4))
 		//以有效下注计算水池后   可以直接放在下注的时候计算税收
 		// game.TotalRevenue = game.TotalRevenue.Add(bet.Mul(rate).Truncate(4))
 		game.UpdateTime = time.Now().Unix()
 		user.Count = user.Count.Add(decimal.NewFromInt(1))
-		user.TotalProfLoss = user.TotalProfLoss.Add(award)
+		addUserLoss(user, award)
 		user.UpdateTime = time.Now().Unix()
 	}
 }
 
-// 返还水池
+// 返还水池（仅退代理游戏预占/多扣赔付，不改玩家亏损累计）
 func (gcm *GameCacheMgr) ReturnPool(agentId int64, userId uint32, symbol string, delta decimal.Decimal) {
 	agent := gcm.GetAgent(agentId)
 	//细分代理锁
@@ -314,11 +345,11 @@ func (gcm *GameCacheMgr) ReturnPool(agentId int64, userId uint32, symbol string,
 	defer agent.lock.Unlock()
 
 	game := agent.GetGame(symbol)
-	user := agent.GetUser(uint32(userId))
-	game.TotalProfLoss = game.TotalProfLoss.Sub(delta)
-	game.UpdateTime = time.Now().Unix()
-	user.TotalProfLoss = user.TotalProfLoss.Sub(delta)
-	user.UpdateTime = time.Now().Unix()
+	_ = agent.GetUser(uint32(userId))
+	if delta.GreaterThan(decimal.Zero) {
+		game.TotalProfLoss = game.TotalProfLoss.Sub(delta)
+		game.UpdateTime = time.Now().Unix()
+	}
 }
 
 // 下注
@@ -332,8 +363,8 @@ func (gcm *GameCacheMgr) ChangePool(agentId int64, userId int32, symbol, currenc
 	if user.IsTourist == 0 {
 		game := agent.GetGame(symbol)
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
-		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
+		// FG：仅 award>0 记入代理总赔付（含预占）
+		addGamePayout(game, award)
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//累计税收
@@ -355,8 +386,8 @@ func (gcm *GameCacheMgr) ChangePool(agentId int64, userId int32, symbol, currenc
 func (gcm *GameCacheMgr) ChangePoolWithNoLock(agent *AgentData, user *User, game *Game, currencyType, recordId string, bet, award, revence decimal.Decimal) bool {
 	if user.IsTourist == 0 {
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
-		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
+		// FG：仅 award>0 记入代理总赔付（含预占）
+		addGamePayout(game, award)
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//
@@ -393,16 +424,16 @@ func (gcm *GameCacheMgr) CheckPoolWithChange(agentId int64, symbol, recordId, cu
 	defer agent.lock.Unlock()
 
 	game := agent.GetGame(symbol)
-	//水池计算方式  pool = 总亏损-总税收
-	pool := (game.TotalEffectBet.Add(bet).Sub(game.TotalProfLoss.Add(award))).Sub(game.TotalRevenue.Add(revenue))
+	//水池计算方式  pool = 有效投注 - 总赔付 - 税收；预判只扣正赔付
+	payout := positiveAward(award)
+	pool := (game.TotalEffectBet.Add(bet).Sub(game.TotalProfLoss.Add(payout))).Sub(game.TotalRevenue.Add(revenue))
 	if pool.LessThanOrEqual(decimal.Zero) {
 		return false
 	}
 	user := agent.GetUser(uint32(userId))
 	if user.IsTourist == 0 {
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
-		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
+		addGamePayout(game, award)
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//
@@ -428,16 +459,16 @@ func (gcm *GameCacheMgr) CheckPoolWithOutBet(agentId int64, symbol, recordId, cu
 	defer agent.lock.Unlock()
 
 	game := agent.GetGame(symbol)
-	//水池计算方式  pool = 总亏损-总税收
+	//水池计算方式  pool = 有效投注 - 总赔付 - 税收
 	pool := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
-	if pool.LessThan(award) {
+	payout := positiveAward(award)
+	if payout.GreaterThan(decimal.Zero) && pool.LessThan(payout) {
 		return false
 	}
 	user := agent.GetUser(uint32(userId))
 	if user.IsTourist == 0 {
 		before := (game.TotalEffectBet.Sub(game.TotalProfLoss)).Sub(game.TotalRevenue)
-		//所有情况都需要扣除水池值 记录赔付
-		game.TotalProfLoss = game.TotalProfLoss.Add(award.Truncate(4))
+		addGamePayout(game, award)
 		//增加水池
 		game.TotalEffectBet = game.TotalEffectBet.Add(bet)
 		//

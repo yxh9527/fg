@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"app/config"
-	"app/entity"
 	"lottery/dao"
 
 	jsoniter "github.com/json-iterator/go"
@@ -14,34 +13,6 @@ import (
 
 	"micro_service/services"
 )
-
-func buildUserRecordInfo(roundId string, totalBet, win float64, recordJSON string) (string, *entity.UserRecordInfo, error) {
-	if strings.TrimSpace(recordJSON) != "" {
-		ur := &entity.UserRecordInfo{}
-		if err := jsoniter.UnmarshalFromString(recordJSON, ur); err == nil && validateUserRecordInfo(ur) {
-			if ur.Common.RecordId == "" {
-				ur.Common.RecordId = roundId
-			}
-			raw, mErr := jsoniter.MarshalToString(ur)
-			return raw, ur, mErr
-		}
-	}
-	ur := &entity.UserRecordInfo{
-		Common: &entity.CommonRecord{
-			RecordId:           roundId,
-			DispatchRewardGold: win,
-		},
-		Connection: &entity.ConnectionRecord{
-			BetGold:     totalBet,
-			WinLoseGold: win - totalBet,
-		},
-		BetRecord: &entity.BetRecord{
-			TotalBetGold: totalBet,
-		},
-	}
-	raw, err := jsoniter.MarshalToString(ur)
-	return raw, ur, err
-}
 
 func parseAmount(v string) decimal.Decimal {
 	d, ok := parseAmountStrict(v)
@@ -294,20 +265,14 @@ func (d *LotteryService) SlotsDoBet(ctx context.Context, req *services.SlotsDoBe
 		}
 	}
 
-	state, _, buildErr := buildUserRecordInfo(req.RoundId, bet.InexactFloat64(), win.InexactFloat64(), req.RecordJson)
-	if buildErr != nil {
-		d.abortIdempotency(idemKey)
-		return failSlotsDoBet(resp, services.ErrorCode_PARAMS_INVALID, "invalid recordJson")
-	}
-
-	slotsResp, callErr := d.SlotsLottery(ctx, &services.SlotsLotteryReq{
+	slotsResp, callErr := d.SlotsLottery(ctx, &slotsLotteryReq{
 		PlayerId:      req.UserId,
 		CurrencyType:  req.CurrencyType,
 		AgentId:       int64(req.AgentId),
 		GameId:        req.GameId,
 		ProfitLoss:    win.String(),
 		Bet:           bet.String(),
-		State:         state,
+		State:         req.RecordJson,
 		RoundID:       req.RoundId,
 		MaxProfitLoss: preWin.String(),
 		Complete:      true,
@@ -424,19 +389,14 @@ func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.Slots
 	currency := ""
 	// Complete 只由 req.Complete 控制，不能用 hasRecord/win 代替。
 	if req.Complete {
-		state, _, buildErr := buildUserRecordInfo(req.RoundId, totalBet.InexactFloat64(), win.InexactFloat64(), req.RecordJson)
-		if buildErr != nil {
-			d.abortIdempotency(idemKey)
-			return failSlotsDoBet(resp, services.ErrorCode_PARAMS_INVALID, "invalid recordJson")
-		}
-		slotsResp, callErr := d.SlotsLottery(ctx, &services.SlotsLotteryReq{
+		slotsResp, callErr := d.SlotsLottery(ctx, &slotsLotteryReq{
 			PlayerId:     req.UserId,
 			CurrencyType: req.CurrencyType,
 			AgentId:      int64(req.AgentId),
 			GameId:       req.GameId,
 			ProfitLoss:   win.String(),
 			Bet:          "0",
-			State:        state,
+			State:        req.RecordJson,
 			RoundID:      req.RoundId,
 			Complete:     true,
 			Account:      req.Account,
@@ -525,11 +485,6 @@ func (d *LotteryService) slotsFreeAwardWithoutComplete(req *services.SlotsDoBetF
 		return decimal.Zero, services.ErrorCode_PARAMS_INVALID
 	}
 
-	state, ur, buildErr := buildUserRecordInfo(req.RoundId, totalBet.InexactFloat64(), win.InexactFloat64(), req.RecordJson)
-	if buildErr != nil || ur == nil || !validateUserRecordInfo(ur) {
-		return decimal.Zero, services.ErrorCode_PARAMS_INVALID
-	}
-
 	var newCurrency int64
 	var code services.ErrorCode
 	if win.GreaterThan(decimal.Zero) {
@@ -554,15 +509,15 @@ func (d *LotteryService) slotsFreeAwardWithoutComplete(req *services.SlotsDoBetF
 		record := ConvertRecord(
 			req.AgentId,
 			req.UserId,
-			ur.Common.RecordId,
+			req.RoundId,
 			req.CurrencyType,
 			eGame.ConfName,
 			account,
-			state,
+			req.RecordJson,
 			nc,
 			uint32(eAgent.WebId),
 			false,
-			ur.BetRecord.TotalBetGold,
+			totalBet.InexactFloat64(),
 			win.InexactFloat64(),
 		)
 		d.SaveRecord(record)
@@ -573,7 +528,7 @@ func (d *LotteryService) slotsFreeAwardWithoutComplete(req *services.SlotsDoBetF
 	return nc, services.ErrorCode_OK
 }
 
-// FruitDoBet 单人 Fruit 门面：复用 QKLDoBet（规则 A：水池/注单/Complete 均走原逻辑）。
+// FruitDoBet 单人 Fruit 门面：复用 doSingleBet（规则 A：水池/注单/Complete 均走原逻辑）。
 // Complete 仅透传 req.Complete，由调用方显式标注。
 func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBetReq) (resp *services.FruitDoBetResp, err error) {
 	resp = &services.FruitDoBetResp{Code: services.ErrorCode_OK, Ret: false}
@@ -599,34 +554,12 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 		return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 
-	resultJSON := strings.TrimSpace(req.RecordJson)
-	if resultJSON == "" {
-		raw, _, buildErr := buildUserRecordInfo(req.RoundId, bet.InexactFloat64(), win.InexactFloat64(), "")
-		if buildErr != nil {
-			return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
-		}
-		resultJSON = raw
-	} else {
-		ur := &entity.UserRecordInfo{}
-		if err := jsoniter.UnmarshalFromString(resultJSON, ur); err != nil || !validateUserRecordInfo(ur) {
-			return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
-		}
-		if ur.Common.RecordId == "" {
-			ur.Common.RecordId = req.RoundId
-			raw, mErr := jsoniter.MarshalToString(ur)
-			if mErr != nil {
-				return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
-			}
-			resultJSON = raw
-		}
-	}
-
 	completeFlag := "0"
 	if req.Complete {
 		completeFlag = "1"
 	}
 	idemKey := buildIdempotencyKey("fruitDoBet", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId)
-	idemSig := idempotencySignature(bet.String(), win.String(), resultJSON, completeFlag)
+	idemSig := idempotencySignature(bet.String(), win.String(), req.RecordJson, completeFlag)
 	if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
 		return failFruitDoBet(resp, code)
 	} else if hit {
@@ -637,12 +570,12 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 		}
 	}
 
-	qklResp, callErr := d.QKLDoBet(ctx, &services.QKLDoBetReq{
+	betResp, callErr := d.doSingleBet(&singleBetReq{
 		UserId:       req.UserId,
 		GameId:       req.GameId,
 		Win:          win.String(),
 		RoundID:      req.RoundId,
-		Result:       resultJSON,
+		Result:       req.RecordJson,
 		Complete:     req.Complete,
 		Bet:          bet.String(),
 		AgentId:      req.AgentId,
@@ -650,21 +583,21 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 	})
 	if callErr != nil {
 		d.abortIdempotency(idemKey)
-		zap.L().Error("FruitDoBet call QKLDoBet failed",
+		zap.L().Error("FruitDoBet call doSingleBet failed",
 			zap.Uint32("userId", req.UserId),
 			zap.String("roundId", req.RoundId),
 			zap.Error(callErr))
 		return failFruitDoBet(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	if qklResp == nil {
+	if betResp == nil {
 		d.abortIdempotency(idemKey)
 		return failFruitDoBet(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	resp.Code = qklResp.Code
-	if qklResp.Currency != "" {
-		resp.Currency, resp.CurrencyCent = fillBalanceResp(qklResp.Currency)
+	resp.Code = betResp.Code
+	if betResp.Currency != "" {
+		resp.Currency, resp.CurrencyCent = fillBalanceResp(betResp.Currency)
 	}
-	if qklResp.Code == services.ErrorCode_OK {
+	if betResp.Code == services.ErrorCode_OK {
 		resp.Ret = true
 		if raw, mErr := jsoniter.MarshalToString(resp); mErr == nil {
 			d.commitIdempotency(idemKey, idemSig, raw)
@@ -685,7 +618,7 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 }
 
 // FruitDoBetMulti 百人扣款门面。
-// 规则 A：复用 QKLDoBetMultiplayerGame → qklBet（扣余额 + 改水池 + 流水）。
+// 规则 A：复用 doMultiBet → deductBet（扣余额 + 改水池 + 流水）。
 func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.FruitDoBetMultiReq) (resp *services.FruitDoBetMultiResp, err error) {
 	resp = &services.FruitDoBetMultiResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -715,7 +648,7 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 		}
 	}
 
-	qklResp, callErr := d.QKLDoBetMultiplayerGame(ctx, &services.QKLDoBetMultiplayerGameReq{
+	betResp, callErr := d.doMultiBet(&multiBetReq{
 		UserId:       req.UserId,
 		GameId:       req.GameId,
 		RoundID:      req.RoundId,
@@ -726,23 +659,23 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 	})
 	if callErr != nil {
 		d.abortIdempotency(idemKey)
-		zap.L().Error("FruitDoBetMulti call QKLDoBetMultiplayerGame failed",
+		zap.L().Error("FruitDoBetMulti call doMultiBet failed",
 			zap.Uint32("userId", req.UserId),
 			zap.String("roundId", req.RoundId),
 			zap.Error(callErr))
 		return failFruitDoBetMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	if qklResp == nil {
+	if betResp == nil {
 		d.abortIdempotency(idemKey)
 		return failFruitDoBetMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	// 原 QKL 在 qklBet 失败时可能仍返回 OK 且 currency 为空，门面按失败处理。
-	if qklResp.Code != services.ErrorCode_OK {
+	// 在 deductBet 失败时可能仍返回 OK 且 currency 为空，门面按失败处理。
+	if betResp.Code != services.ErrorCode_OK {
 		d.abortIdempotency(idemKey)
-		resp.Code = qklResp.Code
+		resp.Code = betResp.Code
 		return resp, nil
 	}
-	if strings.TrimSpace(qklResp.Currency) == "" {
+	if strings.TrimSpace(betResp.Currency) == "" {
 		d.abortIdempotency(idemKey)
 		zap.L().Error("FruitDoBetMulti empty currency after bet",
 			zap.Uint32("userId", req.UserId),
@@ -752,7 +685,7 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 	}
 
 	resp.Ret = true
-	resp.Currency, resp.CurrencyCent = fillBalanceResp(qklResp.Currency)
+	resp.Currency, resp.CurrencyCent = fillBalanceResp(betResp.Currency)
 	if raw, mErr := jsoniter.MarshalToString(resp); mErr == nil {
 		d.commitIdempotency(idemKey, idemSig, raw)
 	} else {
@@ -769,7 +702,7 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 }
 
 // FruitRefundMulti 百人退款门面。
-// 规则 A：复用 QKLCancelBetMultiplayerGame → qklReturn（退余额 + 回滚水池 + 流水）。
+// 规则 A：复用 doMultiRefund → refundBet（退余额 + 回滚水池 + 流水）。
 func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.FruitRefundMultiReq) (resp *services.FruitRefundMultiResp, err error) {
 	resp = &services.FruitRefundMultiResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -799,7 +732,7 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 		}
 	}
 
-	qklResp, callErr := d.QKLCancelBetMultiplayerGame(ctx, &services.QKLCancelBetMultiplayerGameReq{
+	betResp, callErr := d.doMultiRefund(&multiRefundReq{
 		UserId:       req.UserId,
 		GameId:       req.GameId,
 		Bet:          bet.String(),
@@ -809,22 +742,22 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 	})
 	if callErr != nil {
 		d.abortIdempotency(idemKey)
-		zap.L().Error("FruitRefundMulti call QKLCancelBetMultiplayerGame failed",
+		zap.L().Error("FruitRefundMulti call doMultiRefund failed",
 			zap.Uint32("userId", req.UserId),
 			zap.String("roundId", req.RoundId),
 			zap.Error(callErr))
 		return failFruitRefundMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	if qklResp == nil {
+	if betResp == nil {
 		d.abortIdempotency(idemKey)
 		return failFruitRefundMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	if qklResp.Code != services.ErrorCode_OK {
+	if betResp.Code != services.ErrorCode_OK {
 		d.abortIdempotency(idemKey)
-		resp.Code = qklResp.Code
+		resp.Code = betResp.Code
 		return resp, nil
 	}
-	if strings.TrimSpace(qklResp.Currency) == "" {
+	if strings.TrimSpace(betResp.Currency) == "" {
 		d.abortIdempotency(idemKey)
 		zap.L().Error("FruitRefundMulti empty currency after refund",
 			zap.Uint32("userId", req.UserId),
@@ -834,7 +767,7 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 	}
 
 	resp.Ret = true
-	resp.Currency, resp.CurrencyCent = fillBalanceResp(qklResp.Currency)
+	resp.Currency, resp.CurrencyCent = fillBalanceResp(betResp.Currency)
 	if raw, mErr := jsoniter.MarshalToString(resp); mErr == nil {
 		d.commitIdempotency(idemKey, idemSig, raw)
 	} else {
@@ -851,7 +784,7 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 }
 
 // FruitSettleRound 百人整局结算门面。
-// 规则 A：复用 QKLSettleMultiplayer（入账模型为 win+bet；水池/注单/Complete 走原逻辑）。
+// 规则 A：复用 doMultiSettle（入账模型为 win+bet；水池/注单/Complete 走原逻辑）。
 func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.FruitSettleRoundReq) (resp *services.FruitSettleRoundResp, err error) {
 	resp = &services.FruitSettleRoundResp{
 		Code:    services.ErrorCode_OK,
@@ -868,7 +801,7 @@ func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.Fru
 		return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 
-	records := make([]*services.QKLRecord, 0, len(req.Players))
+	records := make([]*settleRecord, 0, len(req.Players))
 	totalWin := decimal.Zero
 	seen := make(map[uint32]struct{}, len(req.Players))
 	for _, p := range req.Players {
@@ -893,34 +826,12 @@ func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.Fru
 		}
 		totalWin = totalWin.Add(win)
 
-		recordJSON := strings.TrimSpace(p.RecordJson)
-		if recordJSON == "" {
-			raw, _, buildErr := buildUserRecordInfo(req.RoundId, bet.InexactFloat64(), win.InexactFloat64(), "")
-			if buildErr != nil {
-				return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
-			}
-			recordJSON = raw
-		} else {
-			ur := &entity.UserRecordInfo{}
-			if err := jsoniter.UnmarshalFromString(recordJSON, ur); err != nil || !validateUserRecordInfo(ur) {
-				return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
-			}
-			if ur.Common.RecordId == "" {
-				ur.Common.RecordId = req.RoundId
-				raw, mErr := jsoniter.MarshalToString(ur)
-				if mErr != nil {
-					return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
-				}
-				recordJSON = raw
-			}
-		}
-
-		records = append(records, &services.QKLRecord{
+		records = append(records, &settleRecord{
 			UserId:       p.UserId,
 			GameId:       req.GameId,
 			Win:          win.String(),
 			RoundID:      req.RoundId,
-			Log:          recordJSON,
+			Log:          p.RecordJson,
 			Bet:          bet.String(),
 			CurrencyType: req.CurrencyType,
 			AgentId:      req.AgentId,
@@ -945,30 +856,30 @@ func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.Fru
 		}
 	}
 
-	qklResp, callErr := d.QKLSettleMultiplayer(ctx, &services.QKLSettleMultiplayerReq{
+	betResp, callErr := d.doMultiSettle(&multiSettleReq{
 		Records:  records,
 		TotalWin: totalWin.String(),
 	})
 	if callErr != nil {
 		d.abortIdempotency(idemKey)
-		zap.L().Error("FruitSettleRound call QKLSettleMultiplayer failed",
+		zap.L().Error("FruitSettleRound call doMultiSettle failed",
 			zap.Uint32("agentId", req.AgentId),
 			zap.Uint32("gameId", req.GameId),
 			zap.String("roundId", req.RoundId),
 			zap.Error(callErr))
 		return failFruitSettleRound(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	if qklResp == nil {
+	if betResp == nil {
 		d.abortIdempotency(idemKey)
 		return failFruitSettleRound(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
-	resp.Code = qklResp.Code
-	if qklResp.Code != services.ErrorCode_OK {
+	resp.Code = betResp.Code
+	if betResp.Code != services.ErrorCode_OK {
 		d.abortIdempotency(idemKey)
 		return resp, nil
 	}
 
-	for _, item := range qklResp.Currencys {
+	for _, item := range betResp.Currencys {
 		if item == nil {
 			continue
 		}
