@@ -162,7 +162,7 @@ func InitMysqlDb(m, p *gorm.DB) {
 		})
 		poolConfigs = append(poolConfigs, &manager.PoolConfig{
 			Key:   esindex.ConfigKey("system"),
-			Value: "{\"game_url\":[\"http://127.0.0.1:10021\"],\"replays\":[\"\"]}",
+			Value: "{\"game_url\":[\"http://127.0.0.1:9700\"],\"replays\":[\"\"]}",
 		})
 		m.Create(poolConfigs)
 	}
