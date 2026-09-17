@@ -160,6 +160,10 @@ func InitMysqlDb(m, p *gorm.DB) {
 			Key:   esindex.ConfigKey("autoCtrl"),
 			Value: "[{\"totalEffect\":\"999999\",\"totalProfLoss\":\"500000\",\"totalProfLossRate\":\"60\",\"controlRate\":\"50\",\"score\":\"100000\"}]",
 		})
+		poolConfigs = append(poolConfigs, &manager.PoolConfig{
+			Key:   esindex.ConfigKey("system"),
+			Value: "{\"game_url\":[\"http://127.0.0.1:10021\"],\"replays\":[\"\"]}",
+		})
 		m.Create(poolConfigs)
 	}
 	//manager
