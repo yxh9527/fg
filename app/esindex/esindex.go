@@ -1,7 +1,7 @@
 package esindex
 
 // Prefix 索引前缀。需要换前缀时直接改这里，例如 "fg_"。
-const Prefix = "pp_"
+const Prefix = "fg_"
 
 // Name 拼接完整索引名：Prefix + suffix（suffix 不含前缀，如 gp_settlement）。
 func Name(suffix string) string {
