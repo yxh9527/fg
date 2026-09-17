@@ -1,11 +1,50 @@
 package esindex
 
-// Prefix 索引前缀。需要换前缀时直接改这里，例如 "fg_"。
-const Prefix = "fg_"
+import "strings"
 
-// Name 拼接完整索引名：Prefix + suffix（suffix 不含前缀，如 gp_settlement）。
+// Prefix 全局前缀（不含下划线）。需要换前缀时直接改这里，例如 "pp" / "fg"。
+// ES/Redis ZSet：Prefix + "_" + suffix
+// Redis 配置路径：/Prefix/config/...
+const Prefix = "fg"
+
+// Name 拼接完整索引名或 Redis ZSet key：Prefix_suffix。
 func Name(suffix string) string {
-	return Prefix + suffix
+	suffix = strings.TrimPrefix(strings.TrimSpace(suffix), "_")
+	return Prefix + "_" + suffix
+}
+
+// PathRoot Redis/配置路径根，如 Prefix="fg" => "/fg"。
+func PathRoot() string {
+	return "/" + strings.TrimSuffix(Prefix, "_")
+}
+
+// ConfigKey 生成配置 key，如 ConfigKey("system") => "/fg/config/system"。
+func ConfigKey(parts ...string) string {
+	return PathRoot() + "/config/" + strings.Join(parts, "/")
+}
+
+// AgentKey 生成代理配置 key，如 AgentKey("1","pool","fff") => "/fg/agent/1/pool/fff"。
+func AgentKey(agentId string, parts ...string) string {
+	return PathRoot() + "/agent/" + agentId + "/" + strings.Join(parts, "/")
+}
+
+// ConfigPattern / AgentPattern 供 LoadConfigs 扫描。
+func ConfigPattern() string { return PathRoot() + "/config/*" }
+func AgentPattern() string  { return PathRoot() + "/agent/*" }
+
+// ParsePath 解析带全局前缀的 key，返回 (section, rest)。
+// 例如 "/fg/config/system" => ("config", ["system"])
+//
+//	"/fg/agent/1/pool/fff" => ("agent", ["1","pool","fff"])
+//
+// 不符合格式返回 section=""。
+func ParsePath(key string) (section string, rest []string) {
+	arr := strings.Split(key, "/")
+	root := strings.TrimPrefix(PathRoot(), "/")
+	if len(arr) < 3 || arr[1] != root {
+		return "", nil
+	}
+	return arr[2], arr[3:]
 }
 
 // 索引/Redis key 后缀常量（不含前缀）

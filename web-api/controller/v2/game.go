@@ -59,7 +59,7 @@ func ApiConfigList(ctx *gin.Context) {
 }
 
 func GetGameUrl(ctx *gin.Context) {
-	data, err := dao.RedisIns().Get("/config/system")
+	data, err := dao.RedisIns().Get(esindex.ConfigKey("system"))
 	if err != nil {
 		zap.L().Error("获取客户端地址配置失败", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Data: nil, Msg: "失败"})
@@ -80,7 +80,7 @@ func UpdateGameUrl(ctx *gin.Context) {
 	replay := ctx.Query("replay")
 	arr := strings.Split(gameUrl, ",")
 	rs := strings.Split(replay, ",")
-	data, err := dao.RedisIns().Get("/config/system")
+	data, err := dao.RedisIns().Get(esindex.ConfigKey("system"))
 	if err != nil {
 		zap.L().Error("获取客户端地址配置失败", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Data: nil, Msg: "失败"})
@@ -97,9 +97,9 @@ func UpdateGameUrl(ctx *gin.Context) {
 	sys.Replays = rs
 	zap.L().Debug("获取系统配置", zap.Any("sys", sys))
 	r, _ := jsoniter.MarshalToString(sys)
-	dao.RedisIns().Set("/config/system", r, -1)
+	dao.RedisIns().Set(esindex.ConfigKey("system"), r, -1)
 	dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
-		"key":  "/config/system",
+		"key":  esindex.ConfigKey("system"),
 		"data": r,
 	})
 	str, _ := jsoniter.MarshalToString(map[string]interface{}{
@@ -244,7 +244,7 @@ func ChangeStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "参数异常", Data: nil})
 		return
 	}
-	err := dao.RedisIns().Set("/config/autoCtrl", asc, -1)
+	err := dao.RedisIns().Set(esindex.ConfigKey("autoCtrl"), asc, -1)
 	if err != nil {
 		zap.L().Error("保存自动单控配置失败", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "保存自动单控配置失败", Data: nil})
@@ -271,7 +271,7 @@ func SaveSingleCtrlConfig(ctx *gin.Context) {
 		items = append(items, a)
 	}
 	str, _ := jsoniter.MarshalToString(items)
-	err := dao.RedisIns().Set("/config/autoCtrl", str, -1)
+	err := dao.RedisIns().Set(esindex.ConfigKey("autoCtrl"), str, -1)
 	if err != nil {
 		zap.L().Error("保存自动单控配置失败", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "保存自动单控配置失败", Data: nil})
@@ -279,7 +279,7 @@ func SaveSingleCtrlConfig(ctx *gin.Context) {
 	}
 
 	dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
-		"key":  "/config/autoCtrl",
+		"key":  esindex.ConfigKey("autoCtrl"),
 		"data": str,
 	})
 	msg, _ := jsoniter.MarshalToString(map[string]interface{}{
@@ -292,7 +292,7 @@ func SaveSingleCtrlConfig(ctx *gin.Context) {
 }
 
 func GetSingleCtrlConfig(ctx *gin.Context) {
-	str, err := dao.RedisIns().Get("/config/autoCtrl")
+	str, err := dao.RedisIns().Get(esindex.ConfigKey("autoCtrl"))
 	if err != nil {
 		zap.L().Error("获取自动单控配置失败", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "保存自动单控配置失败", Data: nil})
@@ -311,7 +311,7 @@ func SaveGameSettingData(ctx *gin.Context) {
 		zap.L().Error("配置异常", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "失败", Data: str})
 	} else {
-		key := "/config/ctrl/default"
+		key := esindex.ConfigKey("ctrl", "default")
 		str, _ = jsoniter.MarshalToString(ac)
 		err = dao.RedisIns().Set(key, str, -1)
 		if err != nil {
@@ -324,7 +324,7 @@ func SaveGameSettingData(ctx *gin.Context) {
 }
 
 func GetGameSettingData(ctx *gin.Context) {
-	key := "/config/ctrl/default"
+	key := esindex.ConfigKey("ctrl", "default")
 	str, err := dao.RedisIns().Get(key)
 	if err != nil {
 		zap.L().Error("获取配置失败", zap.Any("err", err))
@@ -350,7 +350,7 @@ func SyncAllPool(ctx *gin.Context) {
 	piple := dao.RedisIns().Client.Pipeline()
 	cs := make(map[string]string)
 	for _, g := range games {
-		key := fmt.Sprintf("/config/pool/%s", g.ConfName)
+		key := esindex.ConfigKey("pool", g.ConfName)
 		pool.Name = g.Name
 		pool.NameZH = g.NameZH
 		pool.GameId = int64(g.Number)
@@ -416,10 +416,10 @@ func EditExchange(ctx *gin.Context) {
 
 	dataStr, _ := jsoniter.MarshalToString(config.CfgIns.Currency)
 
-	dao.RedisIns().Set("/config/currency", dataStr, -1)
+	dao.RedisIns().Set(esindex.ConfigKey("currency"), dataStr, -1)
 
 	data := &entity.ConfigMsg{}
-	data.Key = "/config/currency"
+	data.Key = esindex.ConfigKey("currency")
 	data.Data = dataStr
 
 	str, _ := jsoniter.MarshalToString(data)
@@ -436,7 +436,7 @@ func EditExchange(ctx *gin.Context) {
 }
 
 func GameCurrencys(ctx *gin.Context) {
-	str, err := dao.RedisIns().Get("/config/currency")
+	str, err := dao.RedisIns().Get(esindex.ConfigKey("currency"))
 	if err != nil {
 		zap.L().Error("保存自动单控配置失败", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "保存自动单控配置失败", Data: nil})

@@ -2,7 +2,7 @@
 #export GOOS=linux
 #定义项目名称,
 #fk
-game_dir_wg="data-center,web-api,web-api-ex,open-api,lottery,game-data-summary"
+game_dir_fg="data-center,web-api,open-api,lottery,game-data-summary"
 
 #定义游戏项目前缀方便后面关闭脚本使用
 #app_header=__yxh_

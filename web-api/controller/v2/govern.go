@@ -39,7 +39,7 @@ func GovernList(ctx *gin.Context) {
 	if agentId >= 0 {
 		for _, game := range games {
 			// /agent/{agentId}/pool/{symbol}
-			key := fmt.Sprintf("/agent/%d/pool/%s", agentId, game.ConfName)
+			key := esindex.AgentKey(fmt.Sprintf("%d", agentId), "pool", game.ConfName)
 			c := config.CfgIns.GetPoolCfgByGameId(int64(agentId), int64(game.Number))
 			pd := &view.PoolData{
 				Name:  game.Name,
@@ -51,7 +51,7 @@ func GovernList(ctx *gin.Context) {
 	} else {
 		for _, game := range games {
 			// /config/pool/{symbol}
-			key := fmt.Sprintf("/config/pool/%s", game.ConfName)
+			key := esindex.ConfigKey("pool", game.ConfName)
 			c := config.CfgIns.GetPoolDefaultCfgByGameId(int64(game.Number))
 			pd := &view.PoolData{
 				Name:  game.Name,

@@ -1,6 +1,8 @@
 package dao
 
 import (
+	"app/cfgparse"
+	"app/esindex"
 	"app/config"
 	"app/entity"
 	"context"
@@ -8,7 +10,6 @@ import (
 	"micro_service/services"
 	"os"
 	"reflect"
-	"strings"
 	"web-api/event"
 
 	"strconv"
@@ -410,15 +411,15 @@ func ConfigsInit() {
 			},
 		}
 		//加载默认配置
-		LoadConfigs(RedisIns(), "/config/*")
+		LoadConfigs(RedisIns(), esindex.ConfigPattern())
 		//加载代理配置
-		LoadConfigs(RedisIns(), "/agent/*")
+		LoadConfigs(RedisIns(), esindex.AgentPattern())
 	}
 }
 
 func LoadConfig() *config.SystemConfig {
 	var sysConfig *config.SystemConfig = &config.SystemConfig{}
-	value, err := RedisIns().Get("/config/system")
+	value, err := RedisIns().Get(esindex.ConfigKey("system"))
 	if err != nil {
 		zap.L().Fatal("获取系统配置失败", zap.Any("err", err))
 	}
@@ -431,71 +432,7 @@ func LoadConfig() *config.SystemConfig {
 
 // 解析配置
 func ParseConfig(key string, value string) {
-	arr := strings.Split(key, "/")
-	if len(arr) < 2 || value == "" {
-		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
-	} else {
-		if arr[1] == "config" {
-			switch arr[2] {
-			// /config/system
-			case "system":
-				tmp := &config.SystemConfig{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetSystemConfig(tmp)
-				} else {
-					zap.L().Error("加载系统配置失败", zap.Any("err", err), zap.Any("value", value))
-				}
-			case "currency":
-				tmp := config.CfgIns.Currency
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetCurrency(tmp)
-				} else {
-					zap.L().Error("加载系统配置失败", zap.Any("err", err), zap.Any("value", value))
-				}
-			// /config/pool/{symbol}
-			case "pool":
-				tmp := &config.Pool{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetDefaultPool(tmp.Symbol, tmp)
-				} else {
-					zap.L().Error("加载pool配置失败", zap.Any("err", err))
-				}
-			// /config/ctrl/{symbol}
-			case "ctrl":
-				tmp := &config.AwardConfig{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					if arr[3] != "default" && tmp.GameId == 0 {
-						zap.L().Debug("ctrl 配置异常", zap.Any("data", tmp))
-						return
-					}
-					config.CfgIns.SetCtrl(arr[3], tmp)
-				} else {
-					zap.L().Error("加载ctrl配置失败", zap.Any("err", err))
-				}
-			// /config/autoCtrl
-			case "autoCtrl":
-				tmp := &config.AutoCtrlMgr{
-					Ctrls: make([]*config.AutoCtrlItem, 0, 32),
-				}
-				if err := jsoniter.UnmarshalFromString(value, &tmp.Ctrls); err == nil {
-					config.CfgIns.SetAutoCtrl(tmp)
-				} else {
-					zap.L().Error("加载autoCtrl配置失败", zap.Any("err", err))
-				}
-			}
-		}
-		if arr[1] == "agent" {
-			// /agent/{agentId}/pool/{symbol}
-			if arr[3] == "pool" {
-				tmp := &config.Pool{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetAgentPool(arr[2], tmp)
-				} else {
-					zap.L().Error("加载代理pool配置失败", zap.Any("err", err))
-				}
-			}
-		}
-	}
+	cfgparse.Parse(key, value)
 }
 
 // 初始化基础配置

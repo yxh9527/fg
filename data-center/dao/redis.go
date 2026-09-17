@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"app/esindex"
 	"app/config"
 	"app/entity"
 	"context"
@@ -608,15 +609,15 @@ func ConfigsInit() {
 			AC:      &config.AutoCtrlMgr{},
 		}
 		//加载默认配置
-		LoadConfigs(RedisIns(), "/config/*")
+		LoadConfigs(RedisIns(), esindex.ConfigPattern())
 		//加载代理配置
-		LoadConfigs(RedisIns(), "/agent/*")
+		LoadConfigs(RedisIns(), esindex.AgentPattern())
 	}
 }
 
 func LoadConfig() *config.SystemConfig {
 	var sysConfig *config.SystemConfig = &config.SystemConfig{}
-	value, err := RedisIns().Get("/config/system", -1)
+	value, err := RedisIns().Get(esindex.ConfigKey("system"), -1)
 	if err != nil {
 		zap.L().Fatal("获取系统配置失败", zap.Any("err", err))
 	}

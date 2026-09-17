@@ -1,6 +1,8 @@
 package dao
 
 import (
+	"app/cfgparse"
+	"app/esindex"
 	"app/config"
 	"app/entity"
 	"app/tables/player"
@@ -108,9 +110,9 @@ func ConfigsInit() {
 			AC:      &config.AutoCtrlMgr{},
 		}
 		//加载默认配置
-		LoadConfigs(Redis(), "/config/*")
+		LoadConfigs(Redis(), esindex.ConfigPattern())
 		//加载代理配置
-		LoadConfigs(Redis(), "/agent/*")
+		LoadConfigs(Redis(), esindex.AgentPattern())
 	}
 }
 
@@ -137,68 +139,7 @@ func Redis() *RedisDao {
 
 // 解析配置
 func ParseConfig(key string, value string) {
-	arr := strings.Split(key, "/")
-	if len(arr) < 2 || value == "" {
-		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
-	} else {
-		if arr[1] == "config" {
-			switch arr[2] {
-			// /config/system
-			case "system":
-				tmp := &config.SystemConfig{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetSystemConfig(tmp)
-				} else {
-					zap.L().Error("加载系统配置失败", zap.Any("err", err), zap.Any("value", value))
-				}
-			case "currency":
-				tmp := config.CfgIns.Currency
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetCurrency(tmp)
-				} else {
-					zap.L().Error("加载系统配置失败", zap.Any("err", err), zap.Any("value", value))
-				}
-			// /config/pool/{symbol}
-			case "pool":
-				tmp := &config.Pool{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					zap.L().Debug("加载pool配置文件成功", zap.Any("data", tmp))
-					config.CfgIns.SetDefaultPool(tmp.Symbol, tmp)
-				} else {
-					zap.L().Error("加载pool配置失败", zap.Any("err", err))
-				}
-			// /config/ctrl/{symbol}
-			case "ctrl":
-				tmp := &config.AwardConfig{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetCtrl(tmp.Symbol, tmp)
-				} else {
-					zap.L().Error("加载ctrl配置失败", zap.Any("err", err))
-				}
-			// /config/autoCtrl
-			case "autoCtrl":
-				tmp := &config.AutoCtrlMgr{
-					Ctrls: make([]*config.AutoCtrlItem, 0, 32),
-				}
-				if err := jsoniter.UnmarshalFromString(value, &tmp.Ctrls); err == nil {
-					config.CfgIns.SetAutoCtrl(tmp)
-				} else {
-					zap.L().Error("加载autoCtrl配置失败", zap.Any("err", err))
-				}
-			}
-		}
-		if arr[1] == "agent" {
-			// /agent/{agentId}/pool/{symbol}
-			if arr[3] == "pool" {
-				tmp := &config.Pool{}
-				if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-					config.CfgIns.SetAgentPool(arr[2], tmp)
-				} else {
-					zap.L().Error("加载代理pool配置失败", zap.Any("err", err))
-				}
-			}
-		}
-	}
+	cfgparse.Parse(key, value)
 }
 
 func (rd *RedisDao) Subscribe(channel string, registryInfo func() *event.EventMgr) {
@@ -419,7 +360,7 @@ func (r *RedisDao) UpdatePlayerCurrency(playerId uint32, currencyDelta int64) (n
 
 // 加载gateway配置
 func (r *RedisDao) LoadAllGateways() []string {
-	gs, err := r.redis.Get(context.Background(), "/config/gateways").Result()
+	gs, err := r.redis.Get(context.Background(), esindex.ConfigKey("gateways")).Result()
 	if err != nil {
 		zap.L().Error("获取网关信息失败", zap.Any("err", err))
 		return []string{}
@@ -430,7 +371,7 @@ func (r *RedisDao) LoadAllGateways() []string {
 
 func LoadConfig() *config.SystemConfig {
 	var sysConfig *config.SystemConfig = &config.SystemConfig{}
-	value, err := Redis().Get("/config/system")
+	value, err := Redis().Get(esindex.ConfigKey("system"))
 	if err != nil {
 		zap.L().Fatal("获取系统配置失败", zap.Any("err", err))
 	}
