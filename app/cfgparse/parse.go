@@ -8,10 +8,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// Parse 解析 Redis 配置 key（格式：/fg/config/... 或 /fg/agent/{id}/pool/{symbol}）。
+// Parse 解析 Redis 配置 key（格式：/{Prefix}/config/... 或 /{Prefix}/agent/...）。
+// 分割后第一段必须等于 esindex.Prefix（代码常量，如 fg），否则视为其他服务配置，直接跳过。
 func Parse(key string, value string) {
+	if value == "" {
+		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
+		return
+	}
+	if !esindex.MatchKeyPrefix(key) {
+		zap.L().Debug("skip config: prefix mismatch",
+			zap.String("key", key),
+			zap.String("expectPrefix", esindex.Prefix))
+		return
+	}
 	section, rest := esindex.ParsePath(key)
-	if section == "" || value == "" {
+	if section == "" {
 		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
 		return
 	}

@@ -5,6 +5,7 @@ import "strings"
 // Prefix 全局前缀（不含下划线）。需要换前缀时直接改这里，例如 "pp" / "fg"。
 // ES/Redis ZSet：Prefix + "_" + suffix
 // Redis 配置路径：/Prefix/config/...
+// 读取 Redis 配置时，key 分割后第一段必须等于 Prefix，否则跳过。
 const Prefix = "fg"
 
 // Name 拼接完整索引名或 Redis ZSet key：Prefix_suffix。
@@ -15,7 +16,7 @@ func Name(suffix string) string {
 
 // PathRoot Redis/配置路径根，如 Prefix="fg" => "/fg"。
 func PathRoot() string {
-	return "/" + strings.TrimSuffix(Prefix, "_")
+	return "/" + Prefix
 }
 
 // ConfigKey 生成配置 key，如 ConfigKey("system") => "/fg/config/system"。
@@ -32,19 +33,36 @@ func AgentKey(agentId string, parts ...string) string {
 func ConfigPattern() string { return PathRoot() + "/config/*" }
 func AgentPattern() string  { return PathRoot() + "/agent/*" }
 
+// MatchKeyPrefix 校验 key 分割后第一段是否等于 Prefix。
+// 例：Prefix=fg，key=/fg/config/system => true；key=/pp/config/system => false。
+func MatchKeyPrefix(key string) bool {
+	key = strings.Trim(strings.TrimSpace(key), "/")
+	if key == "" {
+		return false
+	}
+	arr := strings.Split(key, "/")
+	return arr[0] == Prefix
+}
+
 // ParsePath 解析带全局前缀的 key，返回 (section, rest)。
 // 例如 "/fg/config/system" => ("config", ["system"])
 //
 //	"/fg/agent/1/pool/fff" => ("agent", ["1","pool","fff"])
 //
-// 不符合格式返回 section=""。
+// 第一段不等于 Prefix 或格式不对返回 section=""。
 func ParsePath(key string) (section string, rest []string) {
-	arr := strings.Split(key, "/")
-	root := strings.TrimPrefix(PathRoot(), "/")
-	if len(arr) < 3 || arr[1] != root {
+	key = strings.Trim(strings.TrimSpace(key), "/")
+	if key == "" {
 		return "", nil
 	}
-	return arr[2], arr[3:]
+	arr := strings.Split(key, "/")
+	if arr[0] != Prefix {
+		return "", nil
+	}
+	if len(arr) < 2 {
+		return "", nil
+	}
+	return arr[1], arr[2:]
 }
 
 // 索引/Redis key 后缀常量（不含前缀）

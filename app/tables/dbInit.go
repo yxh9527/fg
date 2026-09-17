@@ -84,7 +84,7 @@ func InitMysqlDb(m, p *gorm.DB) {
 			for _, gt := range gameTypes {
 				typeByName[gt.Name] = int(gt.Id)
 			}
-			seeds := defaultGameSeeds()
+			seeds := DefaultGameSeeds()
 			games := make([]*manager.Game, 0, len(seeds))
 			for _, seed := range seeds {
 				gameTypeId := typeByName[seed.TypeName]

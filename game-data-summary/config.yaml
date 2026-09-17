@@ -1,4 +1,4 @@
-redis:
+﻿redis:
   host:
     - "172.21.211.219:9531"
   user: ""
@@ -21,5 +21,5 @@ elastic:
     - "http://172.21.211.219:9530"
   username: "elastic"
   password: "000000"
-#日志保存路径
+#鏃ュ織淇濆瓨璺緞
 log: ""

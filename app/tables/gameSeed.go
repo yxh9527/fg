@@ -1,16 +1,16 @@
 package tables
 
-// gameSeedItem 初始化 gp_game 用的种子项。
-type gameSeedItem struct {
+// GameSeedItem 初始化 gp_game 用的种子项。
+type GameSeedItem struct {
 	Number   int
 	NameZH   string
 	Symbol   string
 	TypeName string // slots / fruits / ug5，对应 gp_game_type.name
 }
 
-// defaultGameSeeds 依据新服 gameIds + recordGameNameConfig 整理，共 142 款。
-func defaultGameSeeds() []gameSeedItem {
-	return []gameSeedItem{
+// DefaultGameSeeds 依据新服 gameIds + recordGameNameConfig 整理，共 142 款。
+func DefaultGameSeeds() []GameSeedItem {
+	return []GameSeedItem{
 		// slots: 118
 		{2001, "变形金刚", "bxjg", "slots"},
 		{2002, "摸金校尉", "mjxw", "slots"},

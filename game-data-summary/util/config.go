@@ -9,12 +9,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// 解析配置（key：/fg/config/... 或 /fg/agent/...）
+// ParseConfig 解析 Redis 配置；key 第一段必须等于 esindex.Prefix。
 func ParseConfig(key string, value string) {
 	cfgparse.Parse(key, value)
 }
 
-// 初始化基础配置
+// InitBaseConfig 初始化基础配置。
 func InitBaseConfig(path string) *config.RunConfig {
 	yamlFile, err := os.ReadFile(path)
 	if err != nil {

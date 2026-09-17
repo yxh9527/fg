@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"app/config"
@@ -20,8 +20,8 @@ var (
 	}
 	runCmd = &cobra.Command{
 		Use:   "run",
-		Short: "启动open-api",
-		Long:  "启动open-api",
+		Short: "鍚姩open-api",
+		Long:  "鍚姩open-api",
 		Run:   run,
 	}
 )
@@ -31,20 +31,20 @@ var (
 )
 
 func init() {
-	runCmd.Flags().StringVar(&RunConfigPath, "config", "./config.yaml", "指定配置文件，默认使用当前目录下的config.yaml")
+	runCmd.Flags().StringVar(&RunConfigPath, "config", "./config.yaml", "鎸囧畾閰嶇疆鏂囦欢锛岄粯璁や娇鐢ㄥ綋鍓嶇洰褰曚笅鐨刢onfig.yaml")
 	rootCmd.AddCommand(runCmd)
 }
 
-// 初始化基础配置
+// 鍒濆鍖栧熀纭€閰嶇疆
 func InitBaseConfig() *config.RunConfig {
 	yamlFile, err := os.ReadFile(RunConfigPath)
 	if err != nil {
-		zap.L().Fatal("读取基础配置失败", zap.Any("error", err))
+		zap.L().Fatal("璇诲彇鍩虹閰嶇疆澶辫触", zap.Any("error", err))
 	}
 	c := &config.RunConfig{}
 	err = yaml.Unmarshal(yamlFile, c)
 	if err != nil {
-		zap.L().Fatal("解析基础配置异常", zap.Any("error", err))
+		zap.L().Fatal("瑙ｆ瀽鍩虹閰嶇疆寮傚父", zap.Any("error", err))
 	}
 	return c
 }
@@ -60,22 +60,22 @@ func run(cmd *cobra.Command, args []string) {
 	if err := dao.InitDB(rc); err != nil {
 		panic(err)
 	}
-	//初始化代理缓存
+	//鍒濆鍖栦唬鐞嗙紦瀛?
 	dao.InitAgentMgr()
-	//动态域名加载
+	//鍔ㄦ€佸煙鍚嶅姞杞?
 	InitApiConfigMgr()
-	//加载游戏配置
+	//鍔犺浇娓告垙閰嶇疆
 	dao.InitGameCacheMgr()
 	zap.L().Info("Server ", zap.String("name", "open-api"))
 	zap.L().Info("Server start ok")
 	r := controller.NewRouter()
 	if err := r.Run(fmt.Sprintf(":%d", rc.ServerPort)); err != nil {
-		zap.L().Fatal("HTTP Server启动失败", zap.Error(err))
+		zap.L().Fatal("HTTP Server鍚姩澶辫触", zap.Error(err))
 	}
 }
 
 func main() {
-	// 初始化日志库
+	// 鍒濆鍖栨棩蹇楀簱
 	InitZapLogger()
 
 	if err := rootCmd.Execute(); err != nil {
