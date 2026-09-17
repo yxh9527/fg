@@ -617,9 +617,13 @@ func ConfigsInit() {
 
 func LoadConfig() *config.SystemConfig {
 	var sysConfig *config.SystemConfig = &config.SystemConfig{}
-	value, err := RedisIns().Get(esindex.ConfigKey("system"), -1)
+	key := esindex.ConfigKey("system") // /fg/config/system
+	value, err := RedisIns().Get(key, -1)
 	if err != nil {
-		zap.L().Fatal("获取系统配置失败", zap.Any("err", err))
+		zap.L().Fatal("获取系统配置失败",
+			zap.String("key", key),
+			zap.String("hint", "确认 Redis 地址与 key 完全一致（含前导 /）"),
+			zap.Any("err", err))
 	}
 	err = jsoniter.UnmarshalFromString(value, sysConfig)
 	if err != nil {
