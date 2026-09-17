@@ -1,13 +1,13 @@
 elastic:
   hosts:
-    - 'http://172.21.211.219:9530'
-  username: 'elastic'
-  password: '000000'
+    - "http://172.21.211.219:9530"
+  username: "elastic"
+  password: "000000"
 # 对外 HTTP 端口
-server_port: 10092
+server_port: 10032
 # data-center gRPC（鉴权）；lottery gRPC（余额）；注单直连 ES
-datacenter_grpc: '172.21.211.219:10081'
-lottery_grpc: '172.21.211.219:10080'
+datacenter_grpc: "172.21.211.219:10081"
+lottery_grpc: "172.21.211.219:10080"
 # 防重入 + 进程内内存缓存（不写 Redis）
 cache:
   memory_ttl_seconds: 5
@@ -19,5 +19,5 @@ rate_limit:
 games:
   # '1001': 'vs20olympgate'
 # ClientApiRpcProd 服务端调用内部查单时使用
-internal_api_key: 'change-me-client-api-internal'
-log: ''
+internal_api_key: "change-me-client-api-internal"
+log: ""
