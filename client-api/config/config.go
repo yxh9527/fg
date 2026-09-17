@@ -5,27 +5,37 @@ import (
 	"strings"
 )
 
+type MysqlItem struct {
+	Host     string `yaml:"host"`
+	Port     int32  `yaml:"port"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+	Database string `yaml:"database"`
+}
+
 type RunConfig struct {
+	Redis struct {
+		Host []string `yaml:"host"`
+		User string   `yaml:"user"`
+		Pwd  string   `yaml:"pwd"`
+	} `yaml:"redis"`
+	Mysql map[string]MysqlItem `yaml:"mysql"`
 	Elastic struct {
 		Host     []string `yaml:"hosts"`
 		UserName string   `yaml:"username"`
 		Password string   `yaml:"password"`
 	} `yaml:"elastic"`
 	Cache struct {
-		MemoryTTLSeconds int `yaml:"memory_ttl_seconds"` // 本地内存缓存秒数，默认 5
+		MemoryTTLSeconds int `yaml:"memory_ttl_seconds"`
 	} `yaml:"cache"`
 	RateLimit struct {
-		QPS   int `yaml:"qps"`   // 单 IP 每秒令牌，默认 20
-		Burst int `yaml:"burst"` // 桶容量，默认 qps*2
+		QPS   int `yaml:"qps"`
+		Burst int `yaml:"burst"`
 	} `yaml:"rate_limit"`
-	// Games: gameId(string) -> symbol，可选；用于列表/详情兼容老注单
 	Games          map[string]string `yaml:"games"`
 	ServerPort     int               `yaml:"server_port"`
-	DatacenterGrpc string            `yaml:"datacenter_grpc"`
-	LotteryGrpc    string            `yaml:"lottery_grpc"`
-	// InternalAPIKey 供 ClientApiRpcProd 等服务端调用内部查单接口
-	InternalAPIKey string `yaml:"internal_api_key"`
-	Log            string `yaml:"log"`
+	InternalAPIKey string            `yaml:"internal_api_key"`
+	Log            string            `yaml:"log"`
 }
 
 func (c *RunConfig) Validate() error {
@@ -35,14 +45,17 @@ func (c *RunConfig) Validate() error {
 	if c.ServerPort <= 0 || c.ServerPort > 65535 {
 		return fmt.Errorf("server_port invalid")
 	}
-	if strings.TrimSpace(c.DatacenterGrpc) == "" {
-		return fmt.Errorf("datacenter_grpc required")
+	if len(c.Redis.Host) == 0 {
+		return fmt.Errorf("redis.host required")
 	}
-	if strings.TrimSpace(c.LotteryGrpc) == "" {
-		return fmt.Errorf("lottery_grpc required")
+	if c.Mysql == nil || c.Mysql["player"].Host == "" || c.Mysql["manager"].Host == "" {
+		return fmt.Errorf("mysql.player/manager required")
 	}
 	if len(c.Elastic.Host) == 0 {
 		return fmt.Errorf("elastic.hosts required")
+	}
+	if strings.TrimSpace(c.InternalAPIKey) == "" {
+		return fmt.Errorf("internal_api_key required")
 	}
 	if c.Cache.MemoryTTLSeconds < 0 {
 		return fmt.Errorf("cache.memory_ttl_seconds invalid")

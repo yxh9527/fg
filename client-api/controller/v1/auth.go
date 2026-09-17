@@ -8,15 +8,13 @@ import (
 
 	"client-api/cache"
 	"client-api/common"
-	"client-api/rpc"
+	"client-api/dao"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"micro_service/services"
 )
 
 type AuthHandler struct {
-	DC    *rpc.DataCenterClient
 	Guard *cache.Guard
 }
 
@@ -40,7 +38,6 @@ type authResultCache struct {
 	Unauthorized bool   `json:"unauthorized"`
 }
 
-// Authenticate Gateway/客户端登录鉴权；相同参数防重入并短缓存。
 func (h *AuthHandler) Authenticate(c *gin.Context) {
 	var req authenticateReq
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Token) == "" {
@@ -50,31 +47,21 @@ func (h *AuthHandler) Authenticate(c *gin.Context) {
 	payload := &authResultCache{}
 	key := cache.BuildKey("authAuthenticate", req.Token, fmt.Sprintf("%d", req.GameId), fmt.Sprintf("%d", req.EntryUserId))
 	err := h.Guard.Do(key, payload, func() (interface{}, error) {
-		resp, err := h.DC.Authenticate(c.Request.Context(), req.Token, req.GameId, req.EntryUserId)
-		if err != nil {
-			return nil, err
-		}
-		if resp == nil {
-			return nil, fmt.Errorf("empty auth resp")
-		}
-		if resp.Code == services.ErrorCode_SYSTEM_ERROR {
+		resp := dao.Authenticate(req.Token, req.GameId, req.EntryUserId)
+		if resp.SystemError {
 			return nil, fmt.Errorf("auth system error")
 		}
-		out := &authResultCache{
+		return &authResultCache{
 			Success:      resp.Success,
 			UserId:       resp.UserId,
 			IsReEnter:    resp.IsReEnter,
 			AttemptCount: resp.AttemptCount,
 			Message:      resp.Message,
-		}
-		if resp.Code != services.ErrorCode_OK || !resp.Success {
-			out.Unauthorized = true
-			out.Message = firstNonEmpty(resp.Message, "未登录")
-		}
-		return out, nil
+			Unauthorized: resp.Unauthorized || !resp.Success,
+		}, nil
 	})
 	if err != nil {
-		zap.L().Error("Authenticate rpc failed", zap.Error(err))
+		zap.L().Error("Authenticate failed", zap.Error(err))
 		common.Fail(c, http.StatusOK, common.CodeSystemError, "鉴权服务不可用")
 		return
 	}
@@ -91,7 +78,6 @@ func (h *AuthHandler) Authenticate(c *gin.Context) {
 	})
 }
 
-// ValidateToken token 与 userId 绑定校验。
 func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	var req validateReq
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Token) == "" || req.UserId == 0 {
@@ -104,24 +90,20 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	payload := &validateCache{}
 	key := cache.BuildKey("authValidate", req.Token, fmt.Sprintf("%d", req.UserId))
 	err := h.Guard.Do(key, payload, func() (interface{}, error) {
-		resp, err := h.DC.ValidateToken(c.Request.Context(), req.Token, req.UserId)
-		if err != nil {
-			return nil, err
-		}
-		if resp == nil || resp.Code == services.ErrorCode_SYSTEM_ERROR {
+		valid, sysErr := dao.ValidateToken(req.Token, req.UserId)
+		if sysErr {
 			return nil, fmt.Errorf("validate system error")
 		}
-		return &validateCache{Valid: resp.Valid}, nil
+		return &validateCache{Valid: valid}, nil
 	})
 	if err != nil {
-		zap.L().Error("ValidateToken rpc failed", zap.Error(err))
+		zap.L().Error("ValidateToken failed", zap.Error(err))
 		common.Fail(c, http.StatusOK, common.CodeSystemError, "鉴权服务不可用")
 		return
 	}
 	common.OK(c, gin.H{"valid": payload.Valid})
 }
 
-// GetLoginData 登录资料（余额不在此返回）。
 func (h *AuthHandler) GetLoginData(c *gin.Context) {
 	userId64, _ := strconv.ParseUint(c.Query("userId"), 10, 32)
 	userId := uint32(userId64)
@@ -138,43 +120,33 @@ func (h *AuthHandler) GetLoginData(c *gin.Context) {
 		LoginType  int32   `json:"loginType"`
 		Gm         int32   `json:"gm"`
 		Rate       float64 `json:"rate"`
-		CurrencyId uint32  `json:"currencyId"`
 		Symbol     string  `json:"symbol"`
-		CurrRate   float64 `json:"currencyRate"`
 		NotFound   bool    `json:"notFound"`
 	}
 	payload := &loginCache{}
 	key := cache.BuildKey("authLoginData", fmt.Sprintf("%d", userId))
 	err := h.Guard.Do(key, payload, func() (interface{}, error) {
-		resp, err := h.DC.GetLoginData(c.Request.Context(), userId)
-		if err != nil {
-			return nil, err
-		}
-		if resp == nil || resp.Code == services.ErrorCode_SYSTEM_ERROR {
+		profile, ok, sysErr := dao.GetLoginProfile(userId)
+		if sysErr {
 			return nil, fmt.Errorf("login data system error")
 		}
-		if resp.Code != services.ErrorCode_OK || resp.Profile == nil {
+		if !ok || profile == nil {
 			return &loginCache{NotFound: true}, nil
 		}
-		out := &loginCache{
-			UserId:     resp.Profile.UserId,
-			UserName:   resp.Profile.UserName,
-			AgentId:    resp.Profile.AgentId,
-			TopAgentId: resp.Profile.TopAgentId,
-			UserIcon:   resp.Profile.UserIcon,
-			LoginType:  resp.Profile.LoginType,
-			Gm:         resp.Profile.Gm,
-			Rate:       resp.Profile.Rate,
-		}
-		if resp.Profile.Currency != nil {
-			out.CurrencyId = resp.Profile.Currency.CurrencyId
-			out.Symbol = resp.Profile.Currency.Symbol
-			out.CurrRate = resp.Profile.Currency.CurrencyRate
-		}
-		return out, nil
+		return &loginCache{
+			UserId:     profile.UserId,
+			UserName:   profile.UserName,
+			AgentId:    profile.AgentId,
+			TopAgentId: profile.TopAgentId,
+			UserIcon:   profile.UserIcon,
+			LoginType:  profile.LoginType,
+			Gm:         profile.Gm,
+			Rate:       profile.Rate,
+			Symbol:     profile.Symbol,
+		}, nil
 	})
 	if err != nil {
-		zap.L().Error("GetLoginData rpc failed", zap.Error(err))
+		zap.L().Error("GetLoginData failed", zap.Error(err))
 		common.Fail(c, http.StatusOK, common.CodeSystemError, "资料服务不可用")
 		return
 	}
@@ -192,9 +164,9 @@ func (h *AuthHandler) GetLoginData(c *gin.Context) {
 		"gm":         payload.Gm,
 		"rate":       payload.Rate,
 		"currency": gin.H{
-			"currencyId":   payload.CurrencyId,
+			"currencyId":   0,
 			"symbol":       payload.Symbol,
-			"currencyRate": payload.CurrRate,
+			"currencyRate": 1,
 		},
 	})
 }

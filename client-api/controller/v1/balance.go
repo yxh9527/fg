@@ -7,16 +7,16 @@ import (
 
 	"client-api/cache"
 	"client-api/common"
-	"client-api/rpc"
+	"client-api/dao"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
-	"micro_service/services"
 )
 
 type BalanceHandler struct {
-	Lottery *rpc.LotteryClient
-	Guard   *cache.Guard
+	Guard *cache.Guard
 }
 
 type balanceCache struct {
@@ -24,7 +24,6 @@ type balanceCache struct {
 	CurrencyCent int64  `json:"currencyCent"`
 }
 
-// GetBalance 权威余额（分）；供 CommonRpcProd / 记录页使用。
 func (h *BalanceHandler) GetBalance(c *gin.Context) {
 	userId64, _ := strconv.ParseUint(c.Query("userId"), 10, 32)
 	userId := uint32(userId64)
@@ -32,27 +31,20 @@ func (h *BalanceHandler) GetBalance(c *gin.Context) {
 		common.Fail(c, http.StatusOK, common.CodeBadRequest, "参数错误")
 		return
 	}
-	if h.Lottery == nil {
-		common.Fail(c, http.StatusOK, common.CodeSystemError, "余额服务未配置")
-		return
-	}
 
 	payload := &balanceCache{}
 	key := cache.BuildKey("balance", fmt.Sprintf("%d", userId))
 	err := h.Guard.Do(key, payload, func() (interface{}, error) {
-		resp, err := h.Lottery.GetBalance(c.Request.Context(), userId)
+		cent, err := dao.GetBalanceCent(userId)
+		if err == redis.Nil {
+			return nil, fmt.Errorf("player currency missing")
+		}
 		if err != nil {
 			return nil, err
 		}
-		if resp == nil {
-			return nil, fmt.Errorf("empty balance resp")
-		}
-		if resp.Code != services.ErrorCode_OK {
-			return nil, fmt.Errorf("balance code=%v", resp.Code)
-		}
 		return &balanceCache{
-			Currency:     resp.Currency,
-			CurrencyCent: resp.CurrencyCent,
+			Currency:     decimal.NewFromInt(cent).Div(decimal.NewFromInt(100)).Truncate(2).StringFixed(2),
+			CurrencyCent: cent,
 		}, nil
 	})
 	if err != nil {

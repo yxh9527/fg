@@ -9,15 +9,12 @@ import (
 	"client-api/cache"
 	"client-api/common"
 	"client-api/dao"
-	"client-api/rpc"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"micro_service/services"
 )
 
 type RecordHandler struct {
-	DC      *rpc.DataCenterClient
 	Guard   *cache.Guard
 	GameMap *dao.GameMap
 }
@@ -52,24 +49,18 @@ func (h *RecordHandler) resolvePrincipal(c *gin.Context, token string, gameId ui
 	principal := &recordPrincipal{}
 	key := cache.BuildKey("recordAuth", token, fmt.Sprintf("%d", gameId))
 	err := h.Guard.Do(key, principal, func() (interface{}, error) {
-		auth, err := h.DC.Authenticate(c.Request.Context(), token, gameId, 0)
-		if err != nil {
-			return nil, err
-		}
-		if auth == nil || auth.Code == services.ErrorCode_SYSTEM_ERROR {
+		auth := dao.Authenticate(token, gameId, 0)
+		if auth.SystemError {
 			return nil, fmt.Errorf("auth system error")
 		}
-		if auth.Code != services.ErrorCode_OK || !auth.Success || auth.UserId == 0 {
+		if auth.Unauthorized || !auth.Success || auth.UserId == 0 {
 			return nil, errUnauthorized
 		}
 		out := &recordPrincipal{UserId: auth.UserId, GameId: gameId}
-		login, lErr := h.DC.GetLoginData(c.Request.Context(), auth.UserId)
-		if lErr == nil && login != nil && login.Code == services.ErrorCode_OK && login.Profile != nil {
-			out.AgentId = login.Profile.AgentId
-			out.TopAgentId = login.Profile.TopAgentId
-			if login.Profile.Currency != nil {
-				out.CurrencySymbol = login.Profile.Currency.Symbol
-			}
+		if profile, ok, _ := dao.GetLoginProfile(auth.UserId); ok && profile != nil {
+			out.AgentId = profile.AgentId
+			out.TopAgentId = profile.TopAgentId
+			out.CurrencySymbol = profile.Symbol
 		}
 		return out, nil
 	})

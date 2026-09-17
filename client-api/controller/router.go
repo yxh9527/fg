@@ -9,7 +9,6 @@ import (
 	v1 "client-api/controller/v1"
 	"client-api/dao"
 	"client-api/middleware"
-	"client-api/rpc"
 
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
@@ -17,8 +16,6 @@ import (
 )
 
 type RouterDeps struct {
-	DC             *rpc.DataCenterClient
-	Lottery        *rpc.LotteryClient
 	Guard          *cache.Guard
 	Limiter        *middleware.RateLimiter
 	GameMap        *dao.GameMap
@@ -57,16 +54,14 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	engine.Use(ginzap.RecoveryWithZap(zap.L(), true))
 	engine.Use(Cors())
 	engine.Use(RequestTimeout(8 * time.Second))
-	engine.MaxMultipartMemory = 1 << 20 // 1MB
+	engine.MaxMultipartMemory = 1 << 20
 	if deps.Limiter != nil {
 		engine.Use(deps.Limiter.Middleware())
 	}
 
-	// client-api 只服务客户端：鉴权、资料、余额展示、注单查询。
-	// 游戏结算 / GameStorage 不走这里，由游戏服直连 lottery gRPC。
-	auth := &v1.AuthHandler{DC: deps.DC, Guard: deps.Guard}
-	record := &v1.RecordHandler{DC: deps.DC, Guard: deps.Guard, GameMap: deps.GameMap}
-	balance := &v1.BalanceHandler{Lottery: deps.Lottery, Guard: deps.Guard}
+	auth := &v1.AuthHandler{Guard: deps.Guard}
+	record := &v1.RecordHandler{Guard: deps.Guard, GameMap: deps.GameMap}
+	balance := &v1.BalanceHandler{Guard: deps.Guard}
 
 	api := engine.Group("/api/client/v1")
 	{

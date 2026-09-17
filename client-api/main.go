@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"client-api/cache"
 	"client-api/common"
@@ -12,7 +10,6 @@ import (
 	"client-api/controller"
 	"client-api/dao"
 	"client-api/middleware"
-	"client-api/rpc"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -54,6 +51,18 @@ func loadConfig() *config.RunConfig {
 
 func run(_ *cobra.Command, _ []string) {
 	cfg := loadConfig()
+	if err := dao.InitRedis(cfg); err != nil {
+		zap.L().Fatal("初始化 Redis 失败", zap.Error(err))
+	}
+	if err := dao.Redis().Ping(); err != nil {
+		zap.L().Fatal("Redis 自检失败", zap.Error(err))
+	}
+	if err := dao.InitDB(cfg); err != nil {
+		zap.L().Fatal("初始化 MySQL 失败", zap.Error(err))
+	}
+	if err := dao.DB().Ping(); err != nil {
+		zap.L().Fatal("MySQL 自检失败", zap.Error(err))
+	}
 	if err := dao.InitES(cfg); err != nil {
 		zap.L().Fatal("初始化 ES 失败", zap.Error(err))
 	}
@@ -61,41 +70,27 @@ func run(_ *cobra.Command, _ []string) {
 		zap.L().Fatal("ES 自检失败", zap.Error(err))
 	}
 
-	dc := rpc.NewDataCenterClient(cfg.DatacenterGrpc)
-	defer dc.Close()
-	lottery := rpc.NewLotteryClient(cfg.LotteryGrpc)
-	defer lottery.Close()
-	{
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := dc.Ping(ctx); err != nil {
-			cancel()
-			zap.L().Fatal("data-center 自检失败", zap.Error(err))
-		}
-		if err := lottery.Ping(ctx); err != nil {
-			cancel()
-			zap.L().Fatal("lottery 自检失败", zap.Error(err))
-		}
-		cancel()
-	}
-
 	guard := cache.NewGuard(cache.Options{
 		MemoryTTLSeconds: cfg.Cache.MemoryTTLSeconds,
 	})
 	limiter := middleware.NewRateLimiter(cfg.RateLimit.QPS, cfg.RateLimit.Burst)
-	gameMap := dao.NewGameMap(cfg.Games)
+
+	// 配置 games 优先；否则从 MySQL gp_game 加载 number->confName
+	gameMapRaw := cfg.Games
+	if len(gameMapRaw) == 0 {
+		gameMapRaw = dao.DB().LoadGameMap()
+	}
+	gameMap := dao.NewGameMap(gameMapRaw)
 
 	zap.L().Info("client-api start",
 		zap.Int("port", cfg.ServerPort),
-		zap.String("datacenter", cfg.DatacenterGrpc),
-		zap.String("lottery", cfg.LotteryGrpc),
+		zap.Strings("redis", cfg.Redis.Host),
 		zap.Strings("elastic", cfg.Elastic.Host),
 		zap.Int("memoryTTL", cfg.Cache.MemoryTTLSeconds),
 		zap.Int("rateQPS", cfg.RateLimit.QPS),
-		zap.Int("gameMapSize", len(cfg.Games)))
+		zap.Int("gameMapSize", len(gameMapRaw)))
 
 	r := controller.NewRouter(controller.RouterDeps{
-		DC:             dc,
-		Lottery:        lottery,
 		Guard:          guard,
 		Limiter:        limiter,
 		GameMap:        gameMap,

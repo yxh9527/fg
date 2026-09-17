@@ -1,23 +1,32 @@
+redis:
+  host:
+    - "172.21.211.214:9531"
+  user: ""
+  pwd: ""
+mysql:
+  player:
+    host: "172.21.211.214"
+    user: "root"
+    port: 3366
+    password: "yxh2362023!@#"
+    database: "fg_player"
+  manager:
+    host: "172.21.211.214"
+    user: "root"
+    port: 3366
+    password: "yxh2362023!@#"
+    database: "fg_web_manager"
 elastic:
   hosts:
-    - "http://172.21.211.219:9530"
+    - "http://172.21.211.214:9200"
   username: "elastic"
   password: "000000"
-# 对外 HTTP 端口
-server_port: 10032
-# data-center gRPC（鉴权）；lottery gRPC（余额）；注单直连 ES
-datacenter_grpc: "172.21.211.219:10081"
-lottery_grpc: "172.21.211.219:10080"
-# 防重入 + 进程内内存缓存（不写 Redis）
+server_port: 10037
 cache:
   memory_ttl_seconds: 5
-# 单 IP 限流
 rate_limit:
   qps: 20
   burst: 40
-# 可选：gameId -> symbol，兼容只有 symbol 的老注单
-games:
-  # '1001': 'vs20olympgate'
-# ClientApiRpcProd 服务端调用内部查单时使用
-internal_api_key: "change-me-client-api-internal"
+games: {}
+internal_api_key: "23u4&^2skji'llkji"
 log: ""
