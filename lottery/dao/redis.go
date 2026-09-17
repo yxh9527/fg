@@ -3,6 +3,7 @@ package dao
 import (
 	. "app/config"
 	"app/entity"
+	"app/esindex"
 	"context"
 	"fmt"
 	"lottery/event"
@@ -379,10 +380,10 @@ func (rd *RedisDao) GetUserStatData(id uint32) (decimal.Decimal, decimal.Decimal
 func (rd *RedisDao) GetGameStatData(id int64, symbol string) (decimal.Decimal, decimal.Decimal, decimal.Decimal, decimal.Decimal, bool) {
 	itemKey := fmt.Sprintf("%d_%s", id, symbol)
 	piple := rd.cli.Pipeline()
-	piple.ZIncrBy(context.Background(), "agent_effect_data", 0, itemKey)
-	piple.ZIncrBy(context.Background(), "agent_chips_data", 0, itemKey)
-	piple.ZIncrBy(context.Background(), "agent_profitLoss_data", 0, itemKey)
-	piple.ZIncrBy(context.Background(), "agent_revenue_data", 0, itemKey)
+	piple.ZIncrBy(context.Background(), esindex.AgentEffectData(), 0, itemKey)
+	piple.ZIncrBy(context.Background(), esindex.AgentChipsData(), 0, itemKey)
+	piple.ZIncrBy(context.Background(), esindex.AgentProfitLossData(), 0, itemKey)
+	piple.ZIncrBy(context.Background(), esindex.AgentRevenueData(), 0, itemKey)
 	result, err := piple.Exec(context.Background())
 	if err == nil {
 		eff, effErr := result[0].(*redis.FloatCmd).Result()

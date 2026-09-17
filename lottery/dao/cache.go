@@ -2,6 +2,7 @@ package dao
 
 import (
 	"app/config"
+	"app/esindex"
 	"context"
 	"fmt"
 	"math/rand"
@@ -693,10 +694,10 @@ func ResetPool(data interface{}) {
 
 	piple := RedisIns().cli.Pipeline()
 	zap.L().Debug("清理水池开始")
-	piple.Del(context.Background(), "agent_effect_data")
-	piple.Del(context.Background(), "agent_chips_data")
-	piple.Del(context.Background(), "agent_revenue_data")
-	piple.Del(context.Background(), "agent_profitLoss_data")
+	piple.Del(context.Background(), esindex.AgentEffectData())
+	piple.Del(context.Background(), esindex.AgentChipsData())
+	piple.Del(context.Background(), esindex.AgentRevenueData())
+	piple.Del(context.Background(), esindex.AgentProfitLossData())
 	_, err := piple.Exec(context.Background())
 	if err != nil {
 		zap.L().Error("Redis重置pool失败!", zap.Any("err", err))
@@ -722,10 +723,10 @@ func SaveAgentData(games []*Game) {
 		if item.UpdateTime > 0 {
 			key := fmt.Sprintf("%d_%s", item.AgentId, item.Symbol)
 			n++
-			piple.ZAdd(context.Background(), "agent_effect_data", redis.Z{Score: item.TotalEffectBet.InexactFloat64(), Member: key})
-			piple.ZAdd(context.Background(), "agent_chips_data", redis.Z{Score: item.TotalChips.InexactFloat64(), Member: key})
-			piple.ZAdd(context.Background(), "agent_profitLoss_data", redis.Z{Score: item.TotalProfLoss.InexactFloat64(), Member: key})
-			piple.ZAdd(context.Background(), "agent_revenue_data", redis.Z{Score: item.TotalRevenue.InexactFloat64(), Member: key})
+			piple.ZAdd(context.Background(), esindex.AgentEffectData(), redis.Z{Score: item.TotalEffectBet.InexactFloat64(), Member: key})
+			piple.ZAdd(context.Background(), esindex.AgentChipsData(), redis.Z{Score: item.TotalChips.InexactFloat64(), Member: key})
+			piple.ZAdd(context.Background(), esindex.AgentProfitLossData(), redis.Z{Score: item.TotalProfLoss.InexactFloat64(), Member: key})
+			piple.ZAdd(context.Background(), esindex.AgentRevenueData(), redis.Z{Score: item.TotalRevenue.InexactFloat64(), Member: key})
 			item.UpdateTime = 0
 		}
 		if n >= 100 {

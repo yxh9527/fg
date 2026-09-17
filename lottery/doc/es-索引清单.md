@@ -23,6 +23,12 @@ const Prefix = "pp_" // 改成 "fg_"
 | `esindex.UserController()` | `user_controller` | `pp_user_controller` | `fg_user_controller` |
 | `esindex.GameStates()` | `game_states` | `pp_game_states` | `fg_game_states` |
 | `esindex.FlowingWaterLegacy()` | `flowing_water` | `pp_flowing_water` | `fg_flowing_water` |
+| `esindex.AgentEffectData()` | `agent_effect_data` | `pp_agent_effect_data` | `fg_agent_effect_data` |
+| `esindex.AgentChipsData()` | `agent_chips_data` | `pp_agent_chips_data` | `fg_agent_chips_data` |
+| `esindex.AgentProfitLossData()` | `agent_profitLoss_data` | `pp_agent_profitLoss_data` | `fg_agent_profitLoss_data` |
+| `esindex.AgentRevenueData()` | `agent_revenue_data` | `pp_agent_revenue_data` | `fg_agent_revenue_data` |
+
+> 后 4 个是 **Redis ZSet key**（代理游戏统计），与 ES 索引共用同一 `Prefix`。
 
 ## 注意
 

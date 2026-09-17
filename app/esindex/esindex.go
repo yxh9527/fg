@@ -8,7 +8,7 @@ func Name(suffix string) string {
 	return Prefix + suffix
 }
 
-// 索引后缀常量（不含前缀）
+// 索引/Redis key 后缀常量（不含前缀）
 const (
 	SuffixSettlement         = "gp_settlement"       // 注单
 	SuffixFlowingWater       = "gp_flowing_water"    // 账变流水
@@ -18,6 +18,12 @@ const (
 	SuffixUserController     = "user_controller"     // 用户调控
 	SuffixGameStates         = "game_states"         // 断线状态（遗留）
 	SuffixFlowingWaterLegacy = "flowing_water"       // crontab 旧名，仅清理用
+
+	// 代理游戏统计（Redis ZSet）
+	SuffixAgentEffectData     = "agent_effect_data"
+	SuffixAgentChipsData      = "agent_chips_data"
+	SuffixAgentProfitLossData = "agent_profitLoss_data"
+	SuffixAgentRevenueData    = "agent_revenue_data"
 )
 
 func Settlement() string         { return Name(SuffixSettlement) }
@@ -28,3 +34,8 @@ func DataAnalysisRange() string  { return Name(SuffixDataAnalysisRange) }
 func UserController() string     { return Name(SuffixUserController) }
 func GameStates() string         { return Name(SuffixGameStates) }
 func FlowingWaterLegacy() string { return Name(SuffixFlowingWaterLegacy) }
+
+func AgentEffectData() string     { return Name(SuffixAgentEffectData) }
+func AgentChipsData() string      { return Name(SuffixAgentChipsData) }
+func AgentProfitLossData() string { return Name(SuffixAgentProfitLossData) }
+func AgentRevenueData() string    { return Name(SuffixAgentRevenueData) }
