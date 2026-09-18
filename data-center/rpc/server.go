@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"app/esindex"
 	"data-center/dao"
 	"fmt"
 	"micro_service/services"
@@ -48,7 +49,7 @@ func (s *Server) Serve(rds *dao.RedisDao, db *dao.DBDao) {
 	// 注册服务
 	services.RegisterDataCenterServiceServer(ss, s.handler)
 	// 注册ETCD
-	service, err := NewDefNamingService(rds, "wg-datacenter", s.address, int32(s.port))
+	service, err := NewDefNamingService(rds, esindex.ServiceName("datacenter"), s.address, int32(s.port))
 	if err != nil {
 		zap.L().Fatal("failed to create NamingService", zap.Any("err", err))
 	}

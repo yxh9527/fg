@@ -19,6 +19,13 @@ func PathRoot() string {
 	return "/" + Prefix
 }
 
+// ServiceName gRPC 注册名，如 ServiceName("lottery") => "fg-lottery"。
+func ServiceName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, "-")
+	return Prefix + "-" + name
+}
+
 // ConfigKey 生成配置 key，如 ConfigKey("system") => "/fg/config/system"。
 func ConfigKey(parts ...string) string {
 	return PathRoot() + "/config/" + strings.Join(parts, "/")
