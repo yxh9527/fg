@@ -76,14 +76,15 @@ func validateGameStorageItems(items []*services.GameStorageItem) (string, bool) 
 }
 
 // validateFacadeIdentity 结算门面共用的用户/代理/游戏/币种校验。
+// agentId=0 视为测试代理：跳过代理存在/冻结校验，其余字段仍严格校验。
 func validateFacadeIdentity(userId, agentId, gameId uint32, roundId, currencyType string) (services.ErrorCode, string) {
-	if userId == 0 || agentId == 0 || gameId == 0 {
+	if userId == 0 || gameId == 0 {
 		return services.ErrorCode_PARAMS_INVALID, ""
 	}
 	if strings.TrimSpace(roundId) == "" || strings.TrimSpace(currencyType) == "" {
 		return services.ErrorCode_PARAMS_INVALID, ""
 	}
-	if dao.AgentManagerIns().Get(int64(agentId)) == nil {
+	if agentId > 0 && dao.AgentManagerIns().Get(int64(agentId)) == nil {
 		return services.ErrorCode_AGENT_FROZEN, ""
 	}
 	if dao.GamesManagerIns().GetById(int64(gameId)) == nil {
@@ -134,14 +135,15 @@ func failFruitSettleRound(resp *services.FruitSettleRoundResp, code services.Err
 }
 
 // validateFacadeRoom 百人房间维度校验（不含单个 userId）。
+// agentId=0 视为测试代理：跳过代理存在/冻结校验。
 func validateFacadeRoom(agentId, gameId uint32, roundId, currencyType string) (services.ErrorCode, string) {
-	if agentId == 0 || gameId == 0 {
+	if gameId == 0 {
 		return services.ErrorCode_PARAMS_INVALID, ""
 	}
 	if strings.TrimSpace(roundId) == "" || strings.TrimSpace(currencyType) == "" {
 		return services.ErrorCode_PARAMS_INVALID, ""
 	}
-	if dao.AgentManagerIns().Get(int64(agentId)) == nil {
+	if agentId > 0 && dao.AgentManagerIns().Get(int64(agentId)) == nil {
 		return services.ErrorCode_AGENT_FROZEN, ""
 	}
 	if dao.GamesManagerIns().GetById(int64(gameId)) == nil {

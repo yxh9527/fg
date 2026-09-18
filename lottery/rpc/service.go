@@ -5,6 +5,7 @@ import (
 	"app/entity"
 	"app/entity/view"
 	"app/esindex"
+	"app/tables/manager"
 	"app/tables/player"
 	"context"
 	"crypto/md5"
@@ -611,14 +612,19 @@ func (d *LotteryService) SlotsLottery(_ context.Context, req *slotsLotteryReq) (
 	resp.Code = services.ErrorCode_OK
 	eAgent := dao.AgentManagerIns().Get(req.AgentId)
 	if eAgent == nil {
-		resp.Code = services.ErrorCode_AGENT_FROZEN
-		resp.Result = false
-		zap.L().Debug("获取代理信息失败",
-			zap.Any("agentId", req.AgentId),
-			zap.Any("roundId", req.RoundID),
-			zap.Any("playerId", req.PlayerId),
-			zap.Any("gameId", req.GameId))
-		return resp, nil
+		// agentId=0 为测试代理：跳过存在性校验，WebId 记 0。
+		if req.AgentId == 0 {
+			eAgent = &manager.Agent{Id: 0, WebId: 0}
+		} else {
+			resp.Code = services.ErrorCode_AGENT_FROZEN
+			resp.Result = false
+			zap.L().Debug("获取代理信息失败",
+				zap.Any("agentId", req.AgentId),
+				zap.Any("roundId", req.RoundID),
+				zap.Any("playerId", req.PlayerId),
+				zap.Any("gameId", req.GameId))
+			return resp, nil
+		}
 	}
 	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
 	if eGame == nil {

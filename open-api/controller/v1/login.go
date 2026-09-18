@@ -195,10 +195,7 @@ func Login(ctx *gin.Context, params url.Values, agent *manager.Agent) {
 		player.Id,
 		session.Mgckey,
 	)
-	ctx.PureJSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &LoginResp{
-		Code: int(CODE_OK),
-		Url:  requestUrl,
-	}))
+	ctx.Redirect(http.StatusFound, requestUrl)
 }
 
 // production
