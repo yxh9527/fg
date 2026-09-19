@@ -38,12 +38,19 @@ export const formatPlayedTime = (value) => {
 };
 
 export const parseMaybeJson = (value) => {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    return value;
+  let current = value;
+  for (let i = 0; i < 3; i += 1) {
+    if (typeof current !== "string") return current;
+    const text = current.trim();
+    if (!text) return current;
+    if (text.charAt(0) !== "{" && text.charAt(0) !== "[") return current;
+    try {
+      current = JSON.parse(text);
+    } catch (error) {
+      return value;
+    }
   }
+  return current;
 };
 
 const normalizeOssBaseUrl = (url) => {
@@ -51,11 +58,10 @@ const normalizeOssBaseUrl = (url) => {
   return url.endsWith("/") ? url : url + "/";
 };
 
-/** 与 fgServer recordService.buildRecordAssetUrl 对齐：相对 /global 路径补 OSS。 */
+/** 与 fgServer recordService.buildRecordAssetUrl 对齐：只给 /global 相对路径补 OSS。 */
 export const resolveAssetUrl = (value, ossUrl) => {
   if (value === null || value === undefined || value === "") return "";
-  if (typeof value === "number") return "";
-  if (typeof value !== "string") return "";
+  if (typeof value !== "string") return value;
   const text = value.trim();
   if (!text) return "";
   if (/^(?:https?:)?\/\//i.test(text) || text.indexOf("data:") === 0) {
@@ -65,18 +71,26 @@ export const resolveAssetUrl = (value, ossUrl) => {
   let assetPath = "";
   if (text.indexOf("/global/") === 0) assetPath = text.slice(1);
   else if (text.indexOf("global/") === 0) assetPath = text;
-
-  if (!assetPath) {
-    // 已是站点相对路径时，也尽量挂到 OSS，避免打到后台域名 404。
-    if (text.charAt(0) === "/") {
-      assetPath = text.slice(1);
-    } else {
-      return text;
-    }
-  }
+  if (!assetPath) return text;
 
   const base = normalizeOssBaseUrl(ossUrl || config.ossUrl || "");
   return base ? base + assetPath : "/" + assetPath;
+};
+
+/** 详情里图片路径可能藏在任意嵌套结构，递归只改资源字符串。 */
+export const applyRecordAssetBaseUrl = (value, ossUrl) => {
+  if (typeof value === "string") return resolveAssetUrl(value, ossUrl);
+  if (Array.isArray(value)) {
+    return value.map((item) => applyRecordAssetBaseUrl(item, ossUrl));
+  }
+  if (value && typeof value === "object") {
+    const next = {};
+    Object.keys(value).forEach((key) => {
+      next[key] = applyRecordAssetBaseUrl(value[key], ossUrl);
+    });
+    return next;
+  }
+  return value;
 };
 
 export const buildSlotCardImageUrl = (gameId, symbolId, size) => {
@@ -106,112 +120,231 @@ const looksLikeDetailInfo = (value) =>
         value.total_bet),
   );
 
-const coerceDetailObject = (value) => {
-  const detail = parseMaybeJson(value);
-  if (!detail || typeof detail !== "object") return null;
-  if (detail.info && typeof detail.info === "object") {
-    return { detail: detail, info: detail.info };
+/**
+ * 对齐 fgServer clientApiRpcProd.mapEsToDetailRow：
+ * 形态 A：log 直接是 { styleV, info }
+ * 形态 B：log 是完整 SlotSpinRecord，详情在 detail.info
+ */
+const extractRecordDetail = (value) => {
+  const parsed = parseMaybeJson(value);
+  if (!parsed || typeof parsed !== "object") return null;
+  if (parsed.info && typeof parsed.info === "object") {
+    return parsed;
   }
-  if (looksLikeDetailInfo(detail)) {
-    return { detail: { info: detail }, info: detail };
+  const nested = parseMaybeJson(parsed.detail);
+  if (nested && typeof nested === "object" && nested.info && typeof nested.info === "object") {
+    return nested;
+  }
+  if (looksLikeDetailInfo(parsed)) {
+    return { info: parsed };
   }
   return null;
 };
 
-/** 兼容 detail / log / detail.info / 直接 info 几种落库形态。 */
 export const resolveDetailPayload = (row) => {
   if (!row || typeof row !== "object") {
     return { detail: null, info: null };
   }
-  const fromDetail = coerceDetailObject(row.detail);
-  if (fromDetail) return fromDetail;
-  const fromLog = coerceDetailObject(row.log);
-  if (fromLog) return fromLog;
-  if (row.info && typeof row.info === "object") {
-    return { detail: { info: row.info }, info: row.info };
+  const sources = [row.detail, row.log, row.info ? { info: row.info } : null];
+  for (let i = 0; i < sources.length; i += 1) {
+    if (sources[i] == null || sources[i] === "") continue;
+    const detail = extractRecordDetail(sources[i]);
+    if (detail && detail.info && typeof detail.info === "object") {
+      return { detail: detail, info: detail.info };
+    }
   }
   return { detail: null, info: null };
 };
 
-const resolveGridCell = (cell, gameId, size, ossUrl) => {
-  if (typeof cell === "number" || (/^\d+$/.test(String(cell || "")))) {
-    return resolveAssetUrl(buildSlotCardImageUrl(gameId, cell, size), ossUrl);
-  }
-  if (typeof cell !== "string") return "";
-  const text = cell.trim();
-  if (!text) return "";
-  // card_01.png / 01.png 这类残缺路径，按 gameId 补全。
-  const cardMatch = text.match(/(?:card_)?(\d{1,2})(?:\.png)?(?:\?.*)?$/i);
-  if (
-    cardMatch &&
-    text.indexOf("/global/") < 0 &&
-    text.indexOf("global/") < 0 &&
-    text.indexOf("http") < 0
-  ) {
-    return resolveAssetUrl(
-      buildSlotCardImageUrl(gameId, cardMatch[1], size),
-      ossUrl,
+const fruitKaijiangUrl = (gameId, winPosition) =>
+  "/global/game/fruit/zh_CN/" + gameId + "/kaijiang/" + winPosition + ".png?v=1.23";
+
+const fruitXiazhuUrl = (gameId, position) =>
+  "/global/game/fruit/zh_CN/" + gameId + "/xiazhu/" + position + ".png?v=1.23";
+
+/** 对齐 recordService.buildSlotLogDetailsResponse 对旧 Fruit 记录的补齐。 */
+const patchFruitRecordInfo = (rawInfo, recordId) => {
+  if (!rawInfo || typeof rawInfo !== "object") return rawInfo;
+  let info = Object.assign({}, rawInfo);
+  const gameId = Number(info.game_id || 0);
+
+  if (gameId === 7026 && Array.isArray(info.specific_bet_info)) {
+    const betPositions = Object.keys(info.total_bet || {});
+    info.specific_bet_info = info.specific_bet_info.map((betInfo, index) =>
+      Object.assign({}, betInfo, {
+        bet_area_url:
+          betInfo.bet_area_url ||
+          (betPositions[index] ? fruitXiazhuUrl(7026, betPositions[index]) : ""),
+      }),
     );
   }
-  return resolveAssetUrl(text, ossUrl);
-};
 
-const mapImageMatrix = (value, gameId, size, ossUrl) => {
-  if (!Array.isArray(value) || !value.length) return [];
-  if (Array.isArray(value[0])) {
-    return value
-      .map((row) => {
-        if (!Array.isArray(row)) return [];
-        return row
-          .map((cell) => resolveGridCell(cell, gameId, size, ossUrl))
-          .filter(Boolean);
-      })
-      .filter((row) => row.length);
+  if ([7000, 7002, 7008, 7009, 7026].indexOf(gameId) >= 0 && !info.ju_id) {
+    const winPosition = Number((info.reward_result && info.reward_result[0]) || 0);
+    const betNum = info.all_bets != null ? info.all_bets : "0";
+    const rewardMoney = info.sum_bonus != null ? info.sum_bonus : 0;
+    const betPositions = Object.keys(info.total_bet || {});
+    info = Object.assign({}, info, {
+      ju_id: info.ju_id || recordId,
+      reward_result: ["普通"],
+      result_show_url: winPosition > 0 ? [fruitKaijiangUrl(gameId, winPosition)] : [],
+      specific_bet_info: (info.specific_bet_info || []).map((betInfo, index) =>
+        Object.assign({}, betInfo, {
+          bet_area_url:
+            betInfo.bet_area_url ||
+            fruitXiazhuUrl(gameId, betPositions[index] != null ? betPositions[index] : index + 1),
+          bet_nums: betInfo.bet_nums != null ? betInfo.bet_nums : 0,
+          reward_rate: Number(betInfo.reward_money) > 0 ? betInfo.reward_rate : 0,
+          num: betInfo.num != null ? betInfo.num : 0,
+          index: betInfo.index != null ? betInfo.index : "",
+          grid: betInfo.grid || [],
+        }),
+      ),
+      total_bet: { bet_num: betNum, reward_money: rewardMoney },
+      title_type: info.title_type != null ? info.title_type : 1,
+      level: info.level != null ? info.level : 0,
+      player_name: info.player_name || "",
+    });
   }
-  return [
-    value
-      .map((cell) => resolveGridCell(cell, gameId, size, ossUrl))
-      .filter(Boolean),
-  ].filter((row) => row.length);
-};
 
-const mapImageList = (value, gameId, size, ossUrl) => {
-  if (!value && value !== 0) return [];
-  if (!Array.isArray(value)) {
-    const url = resolveGridCell(value, gameId, size, ossUrl);
-    return url ? [url] : [];
+  if (gameId === 7011 && !(info.specific_bet_info && info.specific_bet_info.length)) {
+    const elements = (info.reward_result || [])
+      .map(Number)
+      .filter(Number.isFinite)
+      .slice(0, 16);
+    const grid = [];
+    for (let row = 0; row < 4; row += 1) {
+      grid.push(
+        elements.slice(row * 4, (row + 1) * 4).map((element) =>
+          fruitXiazhuUrl(7011, element === 6 ? 16 : element),
+        ),
+      );
+    }
+    const legacyTotal = info.total_bet || {};
+    const betNum = info.all_bets != null ? info.all_bets : "0";
+    const rewardMoney = info.sum_bonus != null ? info.sum_bonus : 0;
+    const betValue = Number(betNum);
+    const rewardRate = betValue > 0 ? (Number(rewardMoney) / betValue) * 100 : 0;
+    info = Object.assign({}, info, {
+      ju_id: recordId,
+      reward_result: ["普通"],
+      specific_bet_info: [
+        {
+          bet_area_url: 0,
+          bet_num: betNum,
+          bet_nums: Number(legacyTotal.bet_num || 0),
+          reward_rate: rewardRate,
+          reward_money: rewardMoney,
+          num: 0,
+          index: 1,
+          grid: grid,
+        },
+      ],
+      total_bet: { bet_num: betNum, reward_money: rewardMoney },
+      title_type: 1,
+      level: 1,
+      player_name: "",
+    });
   }
-  return value
-    .map((item) => resolveGridCell(item, gameId, size, ossUrl))
-    .filter(Boolean);
+
+  if (gameId === 7027) {
+    const currentBet = (info.specific_bet_info && info.specific_bet_info[0]) || {};
+    const legacyTotal = info.total_bet || {};
+    const level =
+      info.num != null
+        ? info.num
+        : currentBet.num != null
+          ? currentBet.num
+          : Number(legacyTotal.level || 0);
+    const rewardRate = Number(currentBet.reward_rate || 0);
+    const betNum =
+      info.bet_num != null
+        ? info.bet_num
+        : currentBet.bet_num != null
+          ? currentBet.bet_num
+          : info.all_bets != null
+            ? info.all_bets
+            : "0";
+    const rewardMoney =
+      info.reward_money != null
+        ? info.reward_money
+        : currentBet.reward_money != null
+          ? currentBet.reward_money
+          : info.sum_bonus != null
+            ? info.sum_bonus
+            : 0;
+    const riskLevels = ["", "低", "中", "高"];
+    const risk = info.risk || riskLevels[Number(legacyTotal.risk || 0)] || "";
+    info = Object.assign({}, info, {
+      ju_id: info.ju_id || recordId,
+      reward_result: ["普通"],
+      specific_bet_info: [
+        Object.assign({}, currentBet, {
+          bet_area_url: currentBet.bet_area_url || 0,
+          bet_num: betNum,
+          bet_nums: currentBet.bet_nums != null ? currentBet.bet_nums : 0,
+          reward_rate: rewardRate,
+          reward_money: rewardMoney,
+          num: level,
+          index: currentBet.index != null ? currentBet.index : "",
+          grid: currentBet.grid || [],
+        }),
+      ],
+      total_bet: { bet_num: betNum, reward_money: rewardMoney },
+      title_type: info.title_type != null ? info.title_type : 1,
+      level: info.level != null ? info.level : 0,
+      bet_num: betNum,
+      risk: risk,
+      num: level,
+      rate: info.rate != null ? info.rate : (rewardRate / 100).toFixed(2),
+      reward_money: rewardMoney,
+      player_name: info.player_name || "",
+    });
+  }
+
+  return info;
 };
 
-const enrichDetailInfo = (rawInfo, gameId, ossUrl) => {
+const normalizeBonusGameInfo = (info) => {
+  if (!info || typeof info !== "object") return info;
+  const raw = info.bonus_game_info;
+  const hasObjectShape =
+    raw && typeof raw === "object" && !Array.isArray(raw) && Object.prototype.hasOwnProperty.call(raw, "bonus_info");
+  if (hasObjectShape) return info;
+  return Object.assign({}, info, {
+    bonus_game_info: {
+      bonus_info: Array.isArray(raw) ? raw : [],
+      xiao_all_bonus: info.xiao_all_bonus != null ? info.xiao_all_bonus : info.sum_bonus != null ? info.sum_bonus : 0,
+    },
+  });
+};
+
+const convertNumericCells = (value, gameId, size, ossUrl) => {
+  if (typeof value === "number" || /^\d+$/.test(String(value || ""))) {
+    return resolveAssetUrl(buildSlotCardImageUrl(gameId, value, size), ossUrl);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => convertNumericCells(item, gameId, size, ossUrl));
+  }
+  return value;
+};
+
+const enrichDetailInfo = (rawInfo, gameId, ossUrl, recordId) => {
   if (!rawInfo || typeof rawInfo !== "object") return null;
-  const info = Object.assign({}, rawInfo);
-  const id = Number((info.game_id != null ? info.game_id : gameId) || 0);
+  const id = Number((rawInfo.game_id != null ? rawInfo.game_id : gameId) || 0);
+  let info = patchFruitRecordInfo(Object.assign({}, rawInfo, { game_id: id || rawInfo.game_id }), recordId);
+  info = normalizeBonusGameInfo(info);
 
   if (Array.isArray(info.grids)) {
-    // slots grids 是“列优先”二维数组：[[col0 rows...],[col1 rows...]]
-    info.grids = mapImageMatrix(info.grids, id, "40x40", ossUrl);
-  }
-  if (Array.isArray(info.result_show_url)) {
-    info.result_show_url = mapImageList(info.result_show_url, id, "40x40", ossUrl);
-  } else if (typeof info.result_show_url === "string") {
-    info.result_show_url = mapImageList([info.result_show_url], id, "40x40", ossUrl);
-  }
-  if (Array.isArray(info.result_grid_url)) {
-    info.result_grid_url = mapImageMatrix(info.result_grid_url, id, "40x40", ossUrl);
+    info.grids = convertNumericCells(info.grids, id, "40x40", ossUrl);
   }
   if (Array.isArray(info.lines_info)) {
     info.lines_info = info.lines_info.map((line) => {
       if (!line || typeof line !== "object") return line;
       const next = Object.assign({}, line);
-      if (next.line_shape_url) {
-        next.line_shape_url = resolveAssetUrl(next.line_shape_url, ossUrl);
-      }
-      if (next.symbol) {
-        next.symbol = mapImageList(next.symbol, id, "20x20", ossUrl);
+      if (next.symbol) next.symbol = convertNumericCells(next.symbol, id, "20x20", ossUrl);
+      if (Array.isArray(next.grid_data)) {
+        next.grid_data = convertNumericCells(next.grid_data, id, "40x40", ossUrl);
       }
       return next;
     });
@@ -220,14 +353,9 @@ const enrichDetailInfo = (rawInfo, gameId, ossUrl) => {
     info.m_list_info = info.m_list_info.map((line) => {
       if (!line || typeof line !== "object") return line;
       const next = Object.assign({}, line);
-      if (next.line_shape_url) {
-        next.line_shape_url = resolveAssetUrl(next.line_shape_url, ossUrl);
-      }
-      if (next.symbol) {
-        next.symbol = mapImageList(next.symbol, id, "20x20", ossUrl);
-      }
+      if (next.symbol) next.symbol = convertNumericCells(next.symbol, id, "20x20", ossUrl);
       if (Array.isArray(next.grid_data)) {
-        next.grid_data = mapImageMatrix(next.grid_data, id, "40x40", ossUrl);
+        next.grid_data = convertNumericCells(next.grid_data, id, "40x40", ossUrl);
       }
       return next;
     });
@@ -236,16 +364,32 @@ const enrichDetailInfo = (rawInfo, gameId, ossUrl) => {
     info.specific_bet_info = info.specific_bet_info.map((bet) => {
       if (!bet || typeof bet !== "object") return bet;
       const next = Object.assign({}, bet);
-      if (typeof next.bet_area_url === "string") {
-        next.bet_area_url = resolveAssetUrl(next.bet_area_url, ossUrl);
-      }
       if (Array.isArray(next.grid)) {
-        next.grid = mapImageMatrix(next.grid, id, "40x40", ossUrl);
+        next.grid = convertNumericCells(next.grid, id, "40x40", ossUrl);
       }
       return next;
     });
   }
-  return info;
+
+  info.grids = info.grids || [];
+  info.scatter_info = info.scatter_info || [];
+  info.lines_info = info.lines_info || [];
+  info.m_list_info = info.m_list_info || [];
+  info.little_game_list = info.little_game_list || [];
+  info.choose_list = info.choose_list || [];
+  info.conin_info = info.conin_info || [];
+  info.grid_show = info.grid_show || [];
+  info.type_id = info.type_id != null ? info.type_id : 1;
+  info.times = info.times != null ? info.times : "1";
+  info.jp_bonus = info.jp_bonus != null ? info.jp_bonus : 0;
+  info.is_all_lines = info.is_all_lines != null ? info.is_all_lines : 0;
+  info.line_bets = info.line_bets != null ? info.line_bets : info.all_bets != null ? info.all_bets : "0";
+  if (info.xiao_all_bonus == null) {
+    info.xiao_all_bonus =
+      (info.bonus_game_info && info.bonus_game_info.xiao_all_bonus) || info.sum_bonus || 0;
+  }
+
+  return applyRecordAssetBaseUrl(info, ossUrl);
 };
 
 const pickFirst = function () {
@@ -268,7 +412,15 @@ export const normalizeSettlementRow = (row, ossUrl) => {
       0,
     ),
   );
-  const info = enrichDetailInfo(rawInfo, gameId, ossUrl || config.ossUrl);
+  const recordId = String(
+    pickFirst(
+      source.roundID,
+      source.id,
+      rawInfo && rawInfo.ju_id,
+      source.officeNumber,
+    ),
+  );
+  const info = enrichDetailInfo(rawInfo, gameId, ossUrl || config.ossUrl, recordId);
   const totalBet = info && info.total_bet ? info.total_bet : null;
 
   return {

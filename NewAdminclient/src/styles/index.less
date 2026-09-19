@@ -277,6 +277,33 @@ a {
   background: rgba(255, 255, 255, 0.88);
 }
 
+.settlement-detail-dialog {
+  width: min(880px, calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px);
+  margin: 6vh auto 0 !important;
+  border-radius: 18px !important;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+}
+
+.settlement-detail-dialog .el-dialog__header {
+  padding: 16px 20px 4px;
+}
+
+.settlement-detail-dialog .el-dialog__title {
+  color: var(--text-main);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.settlement-detail-dialog .el-dialog__body {
+  padding: 8px 20px 20px;
+}
+
+.settlement-detail-dialog .el-dialog__footer {
+  display: none;
+}
+
 .el-input__inner,
 .el-textarea__inner {
   border-radius: 10px;

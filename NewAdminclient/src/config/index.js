@@ -11,7 +11,7 @@ const config = {
    * 本地默认走 fgServer staticPort=9701，不把图拷进后台仓库。
    * 生产可改成网关或 CDN，例如 https://pic.vewjn.com/
    */
-  ossUrl: process.env.VUE_APP_OSS_URL || "http://127.0.0.1:9701/",
+  ossUrl: process.env.VUE_APP_OSS_URL || "http://172.21.211.214:10040/",
   homeName: "new-home",
 };
 

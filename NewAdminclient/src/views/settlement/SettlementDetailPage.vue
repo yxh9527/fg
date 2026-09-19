@@ -48,7 +48,7 @@
           <div class="panel-kicker">Orders</div>
           <div class="panel-title">注单列表</div>
         </div>
-        <div class="table-meta">共 {{ pageData.current }} 条</div>
+        <div class="table-meta">共 {{ pageData.current }} 条记录</div>
       </div>
       <app-table :data="tableData" :columns="columns" :loading="loading" />
       <div class="pager-wrap">
@@ -68,19 +68,18 @@
     <el-dialog
       title="游戏详情"
       :visible.sync="detailVisible"
-      width="70%"
+      width="880px"
       custom-class="settlement-detail-dialog"
       append-to-body
     >
       <settlement-record-dialog :row="detailRow" embedded />
-      <span slot="footer"></span>
     </el-dialog>
   </div>
 </template>
 
 <script>
 import AppTable from "@/components/AppTable.vue";
-import { getGameData2, getSettlement } from "@/api/data";
+import { getGameData2, getLinkageList, getSettlement } from "@/api/data";
 import { setting } from "@/config";
 import SettlementRecordDialog from "./SettlementRecordDialog.vue";
 import { formatAmount, formatPlayedTime, parseMaybeJson } from "./settlementHelpers";
@@ -100,6 +99,7 @@ export default {
       userId: "",
       officeNumber: "",
       gameOptions: [],
+      siteOption: [],
       tableData: [],
       detailVisible: false,
       detailRow: null,
@@ -114,29 +114,94 @@ export default {
   computed: {
     columns() {
       return [
-        { title: "游戏ID", key: "gameId", width: 100, align: "center" },
-        { title: "游戏名称", key: "gameName", minWidth: 160, align: "center" },
-        { title: "玩家ID", key: "userId", minWidth: 120, align: "center" },
-        { title: "局号", key: "roundID", minWidth: 180, align: "center" },
         {
-          title: "对局时间",
-          key: "playedDate",
-          minWidth: 170,
+          title: "代理",
+          key: "agentId",
+          minWidth: 100,
           align: "center",
-          render: (h, { row }) => h("span", formatPlayedTime(row.playedDate)),
+          render: (h, { row }) => h("span", this.resolveAgentName(row.agentId)),
         },
-        { title: "货币", key: "currency", width: 100, align: "center" },
+        {
+          title: "游戏名称",
+          key: "gameName",
+          minWidth: 120,
+          align: "center",
+          render: (h, { row }) => h("span", this.resolveGameName(row)),
+        },
+        { title: "局号", key: "roundID", minWidth: 220, align: "center" },
+        { title: "用户ID", key: "userId", minWidth: 90, align: "center" },
+        { title: "账号", key: "account", minWidth: 100, align: "center" },
+        { title: "昵称", key: "nickName", minWidth: 100, align: "center" },
+        {
+          title: "试玩",
+          key: "isTourist",
+          width: 80,
+          align: "center",
+          render: (h, { row }) => {
+            const tourist = Number(row.isTourist) > 0;
+            return h(
+              "span",
+              { class: ["status-pill", tourist ? "is-negative" : "is-positive"] },
+              tourist ? "是" : "否",
+            );
+          },
+        },
+        { title: "Symbol", key: "symbol", minWidth: 110, align: "center" },
+        {
+          title: "状态",
+          key: "complete",
+          width: 80,
+          align: "center",
+          render: (h, { row }) => {
+            const done = row.complete === true || row.complete === 1 || row.complete === "true";
+            return h(
+              "span",
+              { class: ["status-pill", done ? "is-positive" : "is-negative"] },
+              done ? "完成" : "未完成",
+            );
+          },
+        },
+        {
+          title: "流水",
+          key: "flow",
+          width: 80,
+          align: "center",
+          render: (h, { row }) =>
+            h(
+              "el-button",
+              {
+                props: { type: "text", size: "small" },
+                on: { click: () => this.openRecord(row) },
+              },
+              "查询",
+            ),
+        },
+        {
+          title: "详情",
+          key: "detailAction",
+          width: 80,
+          align: "center",
+          render: (h, { row }) =>
+            h(
+              "el-button",
+              {
+                props: { type: "text", size: "small" },
+                on: { click: () => this.openSettlementDetail(row) },
+              },
+              "查看",
+            ),
+        },
         {
           title: "有效下注",
           key: "bet",
-          minWidth: 120,
+          minWidth: 100,
           align: "center",
           render: (h, { row }) => h("span", formatAmount(row.bet)),
         },
         {
-          title: "总输赢",
+          title: "返奖",
           key: "win",
-          minWidth: 120,
+          minWidth: 100,
           align: "center",
           render: (h, { row }) => {
             const value = Number(row.win || 0);
@@ -147,16 +212,14 @@ export default {
             );
           },
         },
+        { title: "货币", key: "currency", width: 80, align: "center" },
+        { title: "索引", key: "rowVersion", minWidth: 170, align: "center" },
         {
-          title: "操作",
-          type: "action",
-          width: 100,
-          buttons: [
-            {
-              label: "查看",
-              onClick: (row) => this.openSettlementDetail(row),
-            },
-          ],
+          title: "对局时间",
+          key: "playedDate",
+          minWidth: 170,
+          align: "center",
+          render: (h, { row }) => h("span", formatPlayedTime(row.playedDate)),
         },
       ];
     },
@@ -170,6 +233,29 @@ export default {
           label: item.nameZH ? `${item.name} [${item.nameZH}]` : item.name,
         })),
       );
+    },
+    async initAgents() {
+      let siteOption = JSON.parse(sessionStorage.getItem("siteOption") || "[]");
+      if (!siteOption.length) {
+        const response = await getLinkageList();
+        siteOption = response.data.data || [];
+        sessionStorage.setItem("siteOption", JSON.stringify(siteOption));
+      }
+      this.siteOption = siteOption;
+    },
+    resolveAgentName(agentId) {
+      const id = Number(agentId);
+      for (const site of this.siteOption) {
+        const hit = (site.agentList || []).find((agent) => Number(agent.id) === id);
+        if (hit) return hit.name;
+      }
+      return agentId === 0 || agentId === "0" ? "代理0" : agentId;
+    },
+    resolveGameName(row) {
+      if (row.gameName) return row.gameName;
+      if (row.symbol) return row.symbol;
+      const hit = this.gameOptions.find((item) => Number(item.number) === Number(row.gameId));
+      return hit ? hit.label : row.gameId || "-";
     },
     buildQuery() {
       const params = {
@@ -185,7 +271,8 @@ export default {
     },
     normalizeRow(item) {
       const row = { ...item };
-      row.detail = parseMaybeJson(row.detail);
+      row.detail = parseMaybeJson(row.detail || row.log);
+      if (!row.roundID && row.roundId) row.roundID = row.roundId;
       return row;
     },
     async fetchList() {
@@ -216,12 +303,23 @@ export default {
       this.detailRow = row;
       this.detailVisible = true;
     },
+    openRecord(row) {
+      const route = this.$router.resolve({
+        name: "players-record",
+        query: {
+          id: row.userId,
+          agent: row.agentId,
+          on: row.roundID,
+        },
+      });
+      window.open(route.href, "_blank");
+    },
   },
   async mounted() {
     if (this.$route.query.userId) this.userId = String(this.$route.query.userId);
     if (this.$route.query.on) this.officeNumber = String(this.$route.query.on);
     if (this.$route.query.gameId) this.gameId = Number(this.$route.query.gameId) || "";
-    await this.initGames();
+    await Promise.all([this.initGames(), this.initAgents()]);
     await this.fetchList();
   },
 };
@@ -230,17 +328,5 @@ export default {
 <style scoped>
 .wide-select {
   min-width: 280px;
-}
-
-:global(.settlement-detail-dialog) {
-  width: min(1360px, calc(100vw - 48px)) !important;
-  max-width: calc(100vw - 48px);
-  margin: 0 auto !important;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-:global(.settlement-detail-dialog .el-dialog__body) {
-  padding: 12px 16px 16px;
 }
 </style>
