@@ -252,6 +252,8 @@ type BillListQuery struct {
 	EndMs    int64
 	Page     int
 	Size     int
+	// OnlySettlement 为 true 时只查 desc=返奖 的流水。
+	OnlySettlement bool
 }
 
 // ListBills 直连 ES 流水索引，不经 data-center / lottery 中转。
@@ -277,6 +279,14 @@ func (d *ESDao) ListBills(q BillListQuery) ([]*BillItem, int64, error) {
 	}
 	if strings.TrimSpace(q.Currency) != "" {
 		querys = append(querys, elastic.NewMatchPhraseQuery("currency", q.Currency))
+	}
+	if q.OnlySettlement {
+		// 玩家流水页只要 desc=返奖（兼容 text / keyword 映射）。
+		querys = append(querys, elastic.NewBoolQuery().Should(
+			elastic.NewTermQuery("desc.keyword", "返奖"),
+			elastic.NewTermQuery("desc", "返奖"),
+			elastic.NewMatchPhraseQuery("desc", "返奖"),
+		).MinimumNumberShouldMatch(1))
 	}
 	startSec := normalizeFlowCreateTime(q.StartMs)
 	endSec := normalizeFlowCreateTime(q.EndMs)
@@ -313,7 +323,17 @@ func (d *ESDao) ListBills(q BillListQuery) ([]*BillItem, int64, error) {
 		b, _ := hit.Source.MarshalJSON()
 		item := &BillItem{}
 		_ = json.Unmarshal(b, item)
+		if q.OnlySettlement && strings.TrimSpace(item.Desc) != "返奖" {
+			continue
+		}
 		out = append(out, item)
+	}
+	if q.OnlySettlement && int64(len(out)) < total {
+		// ES 文本分词可能多召回；以精确 desc 过滤后的本页条数为准时，总数用 count 重算。
+		countQ := elastic.NewBoolQuery().Must(querys...)
+		if cnt, cErr := d.es.Count().Index(esindex.FlowingWater()).Query(countQ).Do(context.Background()); cErr == nil {
+			total = cnt
+		}
 	}
 	return out, total, nil
 }

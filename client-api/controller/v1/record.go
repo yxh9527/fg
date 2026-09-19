@@ -331,6 +331,7 @@ type statementListCachePayload struct {
 }
 
 // InternalListStatements 服务端流水列表：读 ES fg_gp_flowing_water，需 X-Internal-Key。
+// 只返回 desc=返奖 的流水，并把 desc 统一改成「普通」给前端。
 // startTime/endTime 支持毫秒或秒；底层 createTime 按秒过滤。
 func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 	userId64, _ := strconv.ParseUint(c.Query("userId"), 10, 32)
@@ -358,6 +359,7 @@ func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 	payload := &statementListCachePayload{}
 	key := cache.BuildKey(
 		"internalStatementList",
+		"awardOnly_v2",
 		fmt.Sprintf("%d", userId),
 		fmt.Sprintf("%d", gameId),
 		currency,
@@ -368,17 +370,24 @@ func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 	)
 	err := h.Guard.Do(key, payload, func() (interface{}, error) {
 		items, total, qErr := dao.ES().ListBills(dao.BillListQuery{
-			UserId:   userId,
-			GameId:   gameId,
-			Symbol:   symbol,
-			Currency: currency,
-			StartMs:  startMs,
-			EndMs:    endMs,
-			Page:     page,
-			Size:     size,
+			UserId:         userId,
+			GameId:         gameId,
+			Symbol:         symbol,
+			Currency:       currency,
+			StartMs:        startMs,
+			EndMs:          endMs,
+			Page:           page,
+			Size:           size,
+			OnlySettlement: true,
 		})
 		if qErr != nil {
 			return nil, qErr
+		}
+		// 前端流水类型统一展示为「普通」
+		for _, item := range items {
+			if item != nil {
+				item.Desc = "普通"
+			}
 		}
 		return &statementListCachePayload{List: items, Total: total, Page: page, Size: size}, nil
 	})
