@@ -215,13 +215,18 @@ func (d *ESDao) GetRecordDetail(recordId string, userId, gameId uint32, symbol s
 
 // BillItem 对应 ES 流水索引 fg_gp_flowing_water（lottery SaveBill）。
 // CreateTime 为 Unix 秒（lottery 写入 now.Unix()），不是毫秒。
+//
+// 新约定（见 lottery/doc/流水字段变更清单.md）：
+//   bet   = 下注金额（负数；无下注为 0）
+//   award = 到账金额（>=0；无到账为 0）——返奖/结算/回退都写在 award，没有 win 字段
+// 旧数据可能没有 award：此时 bet 仍是账变 delta，读侧会归一化。
 type BillItem struct {
 	UserId         uint32  `json:"userId"`
 	AgentId        uint32  `json:"agentId"`
 	GameId         uint32  `json:"gameId"`
 	Symbol         string  `json:"symbol"`
-	Bet            float64 `json:"bet"`   // 下注，负
-	Award          float64 `json:"award"` // 返奖，>=0
+	Bet            float64 `json:"bet"`
+	Award          float64 `json:"award"`
 	CurrentScore   float64 `json:"currentScore"`
 	Currency       string  `json:"currency"`
 	CurrencySymbol string  `json:"currencySymbol"`
@@ -230,6 +235,37 @@ type BillItem struct {
 	FlowingWaterOn string  `json:"flowingWaterOn"`
 	Desc           string  `json:"desc"`
 	GameName       string  `json:"gameName"`
+}
+
+// normalizeBillAmounts 按新字段约定输出；兼容旧文档（无 award）。
+// 归一化后：bet<=0 表示下注，award>=0 表示到账；净变动 = bet + award。
+func normalizeBillAmounts(raw []byte, item *BillItem) {
+	if item == nil {
+		return
+	}
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return
+	}
+	if _, hasAward := probe["award"]; hasAward {
+		// 新数据：纠正符号约定
+		if item.Award < 0 {
+			item.Award = 0
+		}
+		if item.Bet > 0 {
+			// 防御：新字段下 bet 不应为正
+			item.Bet = 0
+		}
+		return
+	}
+	// 旧数据：bet 是账变 delta
+	if item.Bet > 0 {
+		item.Award = item.Bet
+		item.Bet = 0
+	} else {
+		item.Award = 0
+		// item.Bet 保持负数或 0
+	}
 }
 
 // normalizeFlowCreateTime 把查询时间统一成 Unix 秒，兼容调用方传毫秒。
@@ -324,6 +360,7 @@ func (d *ESDao) ListBills(q BillListQuery) ([]*BillItem, int64, error) {
 		b, _ := hit.Source.MarshalJSON()
 		item := &BillItem{}
 		_ = json.Unmarshal(b, item)
+		normalizeBillAmounts(b, item)
 		if q.OnlySettlement && strings.TrimSpace(item.Desc) != "返奖" {
 			continue
 		}

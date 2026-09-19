@@ -75,7 +75,14 @@
 import dayjs from "dayjs";
 import AppTable from "@/components/AppTable.vue";
 import { getPlayerFwData, getPlayerInfoData } from "@/api/data";
-import { formatDateTime, toFixedValue } from "./playersHelpers";
+import {
+  formatBillAward,
+  formatBillBet,
+  formatDateTime,
+  resolveBillBeforeScore,
+  resolveBillDelta,
+  toFixedValue,
+} from "./playersHelpers";
 
 export default {
   name: "PlayerRecordPage",
@@ -123,23 +130,34 @@ export default {
           align: "center",
           render: (h, { row }) => h("span", this.resolveGameName(row.symbol)),
         },
-        { title: "交易类型", key: "desc", minWidth: 120, align: "center" },
+        { title: "交易类型", key: "desc", minWidth: 100, align: "center" },
+        {
+          title: "下注",
+          key: "bet",
+          minWidth: 100,
+          align: "center",
+          render: (h, { row }) => h("span", formatBillBet(row)),
+        },
+        {
+          title: "返奖/到账",
+          key: "award",
+          minWidth: 110,
+          align: "center",
+          render: (h, { row }) => h("span", formatBillAward(row)),
+        },
         {
           title: "账变前金额",
           key: "beforeScore",
           minWidth: 120,
           align: "center",
-          render: (h, { row }) => {
-            const before = Number(row.currentScore || 0) - Number(row.bet || 0);
-            return h("span", before.toFixed(2));
-          },
+          render: (h, { row }) => h("span", resolveBillBeforeScore(row).toFixed(2)),
         },
         {
           title: "账变金额",
-          key: "bet",
+          key: "delta",
           minWidth: 110,
           align: "center",
-          render: (h, { row }) => h("span", toFixedValue(row.bet)),
+          render: (h, { row }) => h("span", toFixedValue(resolveBillDelta(row))),
         },
         {
           title: "账变后金额",

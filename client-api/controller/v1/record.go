@@ -359,7 +359,7 @@ func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 	payload := &statementListCachePayload{}
 	key := cache.BuildKey(
 		"internalStatementList",
-		"awardOnly_v2",
+		"awardOnly_v4",
 		fmt.Sprintf("%d", userId),
 		fmt.Sprintf("%d", gameId),
 		currency,
@@ -383,7 +383,8 @@ func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 		if qErr != nil {
 			return nil, qErr
 		}
-		// 前端流水类型统一展示为「普通」
+		// 只查返奖：类型展示「普通」。
+		// bet/award 保持 ES 原值，供下游按公式计算交易前/后余额与收支。
 		for _, item := range items {
 			if item != nil {
 				item.Desc = "普通"
