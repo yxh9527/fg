@@ -54,6 +54,7 @@ func BillList(ctx *gin.Context) {
 		b, _ := v.Source.MarshalJSON()
 		bill := &view.Bill{}
 		json.Unmarshal(b, bill)
+		bill.Normalize()
 		bills = append(bills, bill)
 	}
 	result := &entity.BillList{Data: bills, Total: resp.Hits.TotalHits.Value, LastPage: common.CountPage(resp.Hits.TotalHits.Value, int64(pageSize)), Page: int64(page), PerPage: int64(pageSize)}

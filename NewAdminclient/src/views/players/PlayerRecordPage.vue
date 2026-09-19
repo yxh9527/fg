@@ -80,7 +80,6 @@ import {
   formatBillBet,
   formatDateTime,
   resolveBillBeforeScore,
-  resolveBillDelta,
   toFixedValue,
 } from "./playersHelpers";
 
@@ -151,13 +150,6 @@ export default {
           minWidth: 120,
           align: "center",
           render: (h, { row }) => h("span", resolveBillBeforeScore(row).toFixed(2)),
-        },
-        {
-          title: "账变金额",
-          key: "delta",
-          minWidth: 110,
-          align: "center",
-          render: (h, { row }) => h("span", toFixedValue(resolveBillDelta(row))),
         },
         {
           title: "账变后金额",
