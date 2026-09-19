@@ -220,7 +220,8 @@ type BillItem struct {
 	AgentId        uint32  `json:"agentId"`
 	GameId         uint32  `json:"gameId"`
 	Symbol         string  `json:"symbol"`
-	Bet            float64 `json:"bet"`
+	Bet            float64 `json:"bet"`   // 下注，负
+	Award          float64 `json:"award"` // 返奖，>=0
 	CurrentScore   float64 `json:"currentScore"`
 	Currency       string  `json:"currency"`
 	CurrencySymbol string  `json:"currencySymbol"`

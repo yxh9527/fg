@@ -92,7 +92,8 @@ type CacheBillsReq struct {
 	AgentId        uint32  `json:"agentId"`
 	GameId         uint32  `json:"gameId"`
 	Symbol         string  `json:"symbol"`
-	Bet            float64 `json:"bet"`
+	Bet            float64 `json:"bet"`   // 下注金额，下注为负
+	Award          float64 `json:"award"` // 返奖金额，>=0
 	CurrentScore   float64 `json:"currentScore"`
 	Currency       string  `json:"currency"`
 	CurrencySymbol string  `json:"currencySymbol"`

@@ -524,7 +524,11 @@ func (d *LotteryService) slotsFreeAwardWithoutComplete(req *services.SlotsDoBetF
 		)
 		d.SaveRecord(record)
 		if win.GreaterThan(decimal.Zero) {
-			d.SaveBill(req.AgentId, req.UserId, win, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundId)
+			billBet := decimal.Zero
+			if totalBet.GreaterThan(decimal.Zero) {
+				billBet = totalBet.Neg()
+			}
+			d.SaveBill(req.AgentId, req.UserId, billBet, win, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundId)
 		}
 	}
 	return nc, services.ErrorCode_OK

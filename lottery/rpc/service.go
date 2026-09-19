@@ -147,15 +147,20 @@ func validateUserRecordInfo(ur *entity.UserRecordInfo) bool {
 	return ur != nil && ur.Common != nil && ur.BetRecord != nil
 }
 
-func (d *LotteryService) SaveBill(agentId, playerId uint32, delta decimal.Decimal, currencyScore float64, symbol, desc, currencyType string, roundID string) {
+// SaveBill 写流水：bet 为下注（负），award 为返奖（>=0）。
+func (d *LotteryService) SaveBill(agentId, playerId uint32, bet, award decimal.Decimal, currencyScore float64, symbol, desc, currencyType string, roundID string) {
 	now := time.Now()
 	billNo := fmt.Sprintf("L%04d%02d%02d%02d%02d%02d%07d", now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond()%10000000)
 	eGame := dao.GamesManagerIns().Get(symbol)
+	if award.LessThan(decimal.Zero) {
+		award = decimal.Zero
+	}
 	bill := &entity.CacheBillsReq{
 		UserId:         playerId,
 		GameId:         uint32(eGame.Number),
 		AgentId:        uint32(agentId),
-		Bet:            delta.InexactFloat64(),
+		Bet:            bet.InexactFloat64(),
+		Award:          award.InexactFloat64(),
 		CurrentScore:   currencyScore,
 		Currency:       currencyType,
 		CreateTime:     now.Unix(),
@@ -447,7 +452,7 @@ func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, req *s
 		dao.CacheIns().SaveRoundData(int64(req.AgentId), req.RoundID, exAwardMax, req.PlayerId)
 	}
 	if bet.GreaterThan(decimal.Zero) {
-		d.SaveBill(uint32(req.AgentId), req.PlayerId, bet.Neg(), nc.Truncate(2).InexactFloat64(), eGame.ConfName, "下注", req.CurrencyType, req.RoundID)
+		d.SaveBill(uint32(req.AgentId), req.PlayerId, bet.Neg(), decimal.Zero, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "下注", req.CurrencyType, req.RoundID)
 	}
 	d.pcr.Record(int64(req.AgentId), eGame.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), eGame.ConfName))
 	zap.L().Debug("Bet:下注成功",
@@ -526,7 +531,16 @@ func (d *LotteryService) Complete(webId uint32, exchange decimal.Decimal, req *s
 		zap.Any("exAward", award),
 		zap.Any("exBet", bet))
 
-	d.SaveBill(uint32(req.AgentId), req.PlayerId, award, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundID)
+	// 返奖流水：bet 记本金（负），award 记返奖（>=0）
+	billBet := decimal.Zero
+	billAward := decimal.Zero
+	if bet.GreaterThan(decimal.Zero) {
+		billBet = bet.Neg()
+	}
+	if award.GreaterThan(decimal.Zero) {
+		billAward = award
+	}
+	d.SaveBill(uint32(req.AgentId), req.PlayerId, billBet, billAward, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundID)
 
 	zap.L().Debug("Complete:游戏结束", zap.Any("agentId", req.AgentId), zap.Any("gameId", req.GameId), zap.Any("symbol", eGame.ConfName), zap.Any("roundId", req.RoundID), zap.Any("playerId", req.PlayerId), zap.Any("exAward", award), zap.Any("exBet", bet))
 	dao.CacheIns().Complete(int64(req.AgentId), req.PlayerId, eGame.ConfName, bet.Mul(exchange), award.Mul(exchange), pc.Pool[1].Revenue)
@@ -753,7 +767,7 @@ func (d *LotteryService) deductBet(agentId, userId uint32, exchange decimal.Deci
 	if user != nil && user.IsTourist == 0 {
 		if bet.GreaterThan(decimal.Zero) {
 			//下注流水
-			d.SaveBill(uint32(agentId), userId, bet.Neg(), nc.Truncate(2).InexactFloat64(), symbol, "下注", currencyType, recordId)
+			d.SaveBill(uint32(agentId), userId, bet.Neg(), decimal.Zero, nc.Truncate(2).InexactFloat64(), symbol, "下注", currencyType, recordId)
 		}
 		//打点水池记录
 		d.pcr.Record(int64(agentId), symbol, dao.CacheIns().GetPool(int64(agentId), symbol))
@@ -803,8 +817,8 @@ func (d *LotteryService) refundBet(agentId, userId uint32, exchange decimal.Deci
 	user := dao.CacheIns().GetUser(int64(agentId), int64(userId))
 	if user != nil && user.IsTourist == 0 {
 		if bet.GreaterThan(decimal.Zero) {
-			//下注流水
-			d.SaveBill(uint32(agentId), userId, bet.Neg(), nc.Truncate(2).InexactFloat64(), symbol, "回退", currencyType, recordId)
+			// 回退：bet=0，award=回退金额(>0)
+			d.SaveBill(uint32(agentId), userId, decimal.Zero, bet, nc.Truncate(2).InexactFloat64(), symbol, "回退", currencyType, recordId)
 		}
 		//打点水池记录
 		d.pcr.Record(int64(agentId), symbol, dao.CacheIns().GetPool(int64(agentId), symbol))
@@ -945,7 +959,7 @@ func (d *LotteryService) doSingleBet(req *singleBetReq) (resp *singleBetResp, er
 		}
 		if bet.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
 			nc := currencyFromCent(tmp)
-			d.SaveBill(uint32(req.AgentId), req.UserId, bet.Neg(), nc.Truncate(2).InexactFloat64(), eGame.ConfName, "下注", req.CurrencyType, req.RoundID)
+			d.SaveBill(uint32(req.AgentId), req.UserId, bet.Neg(), decimal.Zero, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "下注", req.CurrencyType, req.RoundID)
 		}
 
 		tmp, code = d.updatePlayerCurrency(req.UserId, win.Mul(decimal.NewFromInt(100)).IntPart())
@@ -965,7 +979,11 @@ func (d *LotteryService) doSingleBet(req *singleBetReq) (resp *singleBetResp, er
 		//新余额
 		nc := currencyFromCent(tmp)
 		if win.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
-			d.SaveBill(uint32(req.AgentId), req.UserId, win, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "结算", req.CurrencyType, req.RoundID)
+			billBet := decimal.Zero
+			if bet.GreaterThan(decimal.Zero) {
+				billBet = bet.Neg()
+			}
+			d.SaveBill(uint32(req.AgentId), req.UserId, billBet, win, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "结算", req.CurrencyType, req.RoundID)
 		}
 		resp.Currency = nc.String()
 		newCurrency = nc
@@ -1278,7 +1296,9 @@ func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleRe
 			if user == nil || user.IsTourist != 0 {
 				continue
 			}
+			billAward := decimal.Zero
 			if win.GreaterThan(decimal.Zero) {
+				billAward = win
 				win = win.Add(bet)
 			} else {
 				win = decimal.Zero
@@ -1292,9 +1312,12 @@ func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleRe
 			}
 			dao.CacheIns().ChangePool(int64(item.AgentId), int32(item.UserId), game.ConfName, item.CurrencyType, item.RoundID, decimal.Zero, win.Mul(exchange), defRevenue)
 			dao.CacheIns().Complete(int64(item.AgentId), item.UserId, game.ConfName, bet.Mul(exchange), win.Mul(exchange), defRevenue)
-			if win.GreaterThan(decimal.Zero) {
-				//下注流水
-				d.SaveBill(uint32(item.AgentId), item.UserId, win, nc.Truncate(2).InexactFloat64(), game.ConfName, "结算", item.CurrencyType, roundId)
+			if billAward.GreaterThan(decimal.Zero) || bet.GreaterThan(decimal.Zero) {
+				billBet := decimal.Zero
+				if bet.GreaterThan(decimal.Zero) {
+					billBet = bet.Neg()
+				}
+				d.SaveBill(uint32(item.AgentId), item.UserId, billBet, billAward, nc.Truncate(2).InexactFloat64(), game.ConfName, "结算", item.CurrencyType, roundId)
 			}
 			newCurrencys[item.UserId] = &newCurrencyItem{UserId: item.UserId, Currency: nc.Truncate(2).String()}
 			if game.Number > 0 {
