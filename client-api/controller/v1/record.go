@@ -330,7 +330,8 @@ type statementListCachePayload struct {
 	Size  int             `json:"size"`
 }
 
-// InternalListStatements 服务端流水列表：读 ES pp_gp_flowing_water，需 X-Internal-Key。
+// InternalListStatements 服务端流水列表：读 ES fg_gp_flowing_water，需 X-Internal-Key。
+// startTime/endTime 支持毫秒或秒；底层 createTime 按秒过滤。
 func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 	userId64, _ := strconv.ParseUint(c.Query("userId"), 10, 32)
 	gameId64, _ := strconv.ParseUint(c.Query("gameId"), 10, 32)

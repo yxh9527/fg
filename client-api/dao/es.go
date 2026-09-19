@@ -213,7 +213,8 @@ func (d *ESDao) GetRecordDetail(recordId string, userId, gameId uint32, symbol s
 	return nil, false, nil
 }
 
-// BillItem 对应 ES 流水索引 pp_gp_flowing_water（lottery SaveBill）。
+// BillItem 对应 ES 流水索引 fg_gp_flowing_water（lottery SaveBill）。
+// CreateTime 为 Unix 秒（lottery 写入 now.Unix()），不是毫秒。
 type BillItem struct {
 	UserId         uint32  `json:"userId"`
 	AgentId        uint32  `json:"agentId"`
@@ -228,6 +229,18 @@ type BillItem struct {
 	FlowingWaterOn string  `json:"flowingWaterOn"`
 	Desc           string  `json:"desc"`
 	GameName       string  `json:"gameName"`
+}
+
+// normalizeFlowCreateTime 把查询时间统一成 Unix 秒，兼容调用方传毫秒。
+func normalizeFlowCreateTime(msOrSec int64) int64 {
+	if msOrSec <= 0 {
+		return 0
+	}
+	// 毫秒时间戳约 1e12+，秒约 1e9。
+	if msOrSec > 1_000_000_000_000 {
+		return msOrSec / 1000
+	}
+	return msOrSec
 }
 
 type BillListQuery struct {
@@ -265,13 +278,15 @@ func (d *ESDao) ListBills(q BillListQuery) ([]*BillItem, int64, error) {
 	if strings.TrimSpace(q.Currency) != "" {
 		querys = append(querys, elastic.NewMatchPhraseQuery("currency", q.Currency))
 	}
-	if q.StartMs > 0 || q.EndMs > 0 {
+	startSec := normalizeFlowCreateTime(q.StartMs)
+	endSec := normalizeFlowCreateTime(q.EndMs)
+	if startSec > 0 || endSec > 0 {
 		rq := elastic.NewRangeQuery("createTime")
-		if q.StartMs > 0 {
-			rq = rq.Gte(q.StartMs)
+		if startSec > 0 {
+			rq = rq.Gte(startSec)
 		}
-		if q.EndMs > 0 {
-			rq = rq.Lte(q.EndMs)
+		if endSec > 0 {
+			rq = rq.Lte(endSec)
 		}
 		querys = append(querys, rq)
 	}
