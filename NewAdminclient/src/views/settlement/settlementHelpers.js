@@ -400,6 +400,30 @@ const pickFirst = function () {
   return "";
 };
 
+const hasChinese = (value) => /[\u4e00-\u9fff]/.test(String(value || ""));
+
+export const resolveChineseGameName = (row, gameOptions) => {
+  const source = row || {};
+  const gameId = Number(source.gameId || source.game_id || 0);
+  const symbol = String(source.symbol || "");
+  const options = Array.isArray(gameOptions) ? gameOptions : [];
+  const hit =
+    options.find((item) => Number(item.number) === gameId) ||
+    options.find((item) => {
+      const code = item.confName || item.symbol || "";
+      return code && (code === symbol || code === source.gameName);
+    });
+  if (hit && (hit.nameZH || hit.NameZH)) return hit.nameZH || hit.NameZH;
+  if (hit && hasChinese(hit.name)) return hit.name;
+
+  const spin = parseMaybeJson(source.detail) || parseMaybeJson(source.log) || {};
+  const fromLog = spin.listItem && spin.listItem.game_name;
+  if (hasChinese(fromLog)) return fromLog;
+  if (hasChinese(source.gameName)) return source.gameName;
+  if (hasChinese(source.game_name)) return source.game_name;
+  return pickFirst(source.gameName, source.game_name, symbol, gameId || "");
+};
+
 export const normalizeSettlementRow = (row, ossUrl) => {
   const source = row || {};
   const resolved = resolveDetailPayload(source);
@@ -429,8 +453,7 @@ export const normalizeSettlementRow = (row, ossUrl) => {
     info: info,
     gameId: gameId,
     gameName: pickFirst(
-      source.gameName,
-      source.game_name,
+      resolveChineseGameName(source),
       info && info.game_name,
     ),
     recordId: String(

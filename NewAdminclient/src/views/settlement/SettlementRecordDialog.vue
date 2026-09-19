@@ -316,7 +316,7 @@ export default {
     slotBoardStyle() {
       const count = Math.max(this.slotColumns.length, 1);
       return {
-        gridTemplateColumns: "repeat(" + count + ", 72px)",
+        gridTemplateColumns: "repeat(" + count + ", 96px)",
       };
     },
     lineInfos() {
@@ -402,7 +402,7 @@ export default {
 }
 
 .record-dialog.embedded {
-  max-height: calc(100vh - 180px);
+  max-height: calc(100vh - 140px);
   overflow: auto;
   padding: 2px 2px 8px;
 }
@@ -543,10 +543,10 @@ export default {
 .reel-board,
 .matrix-board {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   width: fit-content;
   max-width: 100%;
-  padding: 16px;
+  padding: 18px;
   border-radius: 18px;
   background:
     radial-gradient(circle at 50% 0, rgba(250, 204, 21, 0.16), transparent 46%),
@@ -560,7 +560,7 @@ export default {
 .matrix-row {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding: 6px;
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.55);
@@ -574,9 +574,9 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 12px;
+  width: 96px;
+  height: 96px;
+  border-radius: 14px;
   background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
@@ -592,8 +592,8 @@ export default {
 }
 
 .reel-icon {
-  width: 58px;
-  height: 58px;
+  width: 84px;
+  height: 84px;
 }
 
 .matrix-board.compact {
@@ -649,6 +649,25 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: min(260px, 32vh);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.line-list::-webkit-scrollbar,
+.bet-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.line-list::-webkit-scrollbar-thumb,
+.bet-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c5d0dc;
+}
+
+.line-list::-webkit-scrollbar-track,
+.bet-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .line-card,
@@ -752,17 +771,17 @@ export default {
   }
 
   .reel-board {
-    grid-template-columns: repeat(auto-fit, 56px) !important;
+    grid-template-columns: repeat(auto-fit, 72px) !important;
   }
 
   .reel-cell {
-    width: 56px;
-    height: 56px;
+    width: 72px;
+    height: 72px;
   }
 
   .reel-icon {
-    width: 44px;
-    height: 44px;
+    width: 62px;
+    height: 62px;
   }
 }
 </style>

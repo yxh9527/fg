@@ -82,7 +82,7 @@ import AppTable from "@/components/AppTable.vue";
 import { getGameData2, getLinkageList, getSettlement } from "@/api/data";
 import { setting } from "@/config";
 import SettlementRecordDialog from "./SettlementRecordDialog.vue";
-import { formatAmount, formatPlayedTime, parseMaybeJson } from "./settlementHelpers";
+import { formatAmount, formatPlayedTime, parseMaybeJson, resolveChineseGameName } from "./settlementHelpers";
 
 export default {
   name: "SettlementDetailPage",
@@ -252,10 +252,7 @@ export default {
       return agentId === 0 || agentId === "0" ? "代理0" : agentId;
     },
     resolveGameName(row) {
-      if (row.gameName) return row.gameName;
-      if (row.symbol) return row.symbol;
-      const hit = this.gameOptions.find((item) => Number(item.number) === Number(row.gameId));
-      return hit ? hit.label : row.gameId || "-";
+      return resolveChineseGameName(row, this.gameOptions) || "-";
     },
     buildQuery() {
       const params = {
@@ -300,7 +297,9 @@ export default {
       this.fetchList();
     },
     openSettlementDetail(row) {
-      this.detailRow = row;
+      this.detailRow = Object.assign({}, row, {
+        gameName: this.resolveGameName(row),
+      });
       this.detailVisible = true;
     },
     openRecord(row) {
