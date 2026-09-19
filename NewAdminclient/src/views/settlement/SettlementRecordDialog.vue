@@ -74,30 +74,33 @@
               v-for="(line, index) in lineInfos"
               :key="'line-' + index"
               class="line-card"
+              :class="{ 'is-special': line.special }"
             >
               <div class="line-head">
-                <span class="line-id">线 {{ line.line_id || index + 1 }}</span>
-                <span v-if="line.direction" class="line-dir">{{ line.direction }}</span>
-                <span class="line-times">x{{ line.times || line.ts || 1 }}</span>
+                <span class="line-id">{{ lineTitle(line, index) }}</span>
+                <span v-if="!line.special && line.direction" class="line-dir">{{ line.direction }}</span>
+                <span class="line-times">{{ lineTimes(line) }}</span>
                 <span class="line-bonus">+{{ formatAmount(line.bonus) }}</span>
               </div>
               <div class="line-body">
                 <img
-                  v-if="line.line_shape_url"
+                  v-if="!line.special && line.line_shape_url"
                   class="line-shape"
                   :src="line.line_shape_url"
                   alt=""
                 />
                 <div class="line-symbols">
                   <img
-                    v-for="(symbol, symbolIndex) in asImageList(line.symbol)"
+                    v-for="(symbol, symbolIndex) in lineSymbols(line)"
                     :key="'symbol-' + index + '-' + symbolIndex"
                     class="line-symbol"
                     :src="symbol"
                     alt=""
                   />
                 </div>
-                <div class="line-meta">投注 {{ formatAmount(line.bets) }}</div>
+                <div v-if="!line.special && Number(line.bets)" class="line-meta">
+                  投注 {{ formatAmount(line.bets) }}
+                </div>
               </div>
             </div>
           </div>
@@ -390,6 +393,20 @@ export default {
       if (!Number.isFinite(number) || number === 0) return formatAmount(0);
       if (Math.abs(number) >= 10) return (number / 100).toFixed(2);
       return formatAmount(number);
+    },
+    lineTitle: function (line, index) {
+      if (line && line.special) return "特殊玩法";
+      return "线 " + ((line && line.line_id) || index + 1);
+    },
+    lineTimes: function (line) {
+      const times = (line && (line.times || line.ts)) || 1;
+      return line && line.special ? "X " + times : "x" + times;
+    },
+    lineSymbols: function (line) {
+      if (!line) return [];
+      const fromSymbol = asImageList(line.symbol);
+      if (fromSymbol.length) return fromSymbol;
+      return asImageList(line.img_url);
     },
   },
 };

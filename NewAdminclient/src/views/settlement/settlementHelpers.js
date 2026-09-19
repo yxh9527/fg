@@ -531,6 +531,20 @@ export const asImageMatrix = (value) => {
   return flat.length ? [flat] : [];
 };
 
+const scatterSymbols = (scatter) => {
+  const num = Math.max(Number(scatter && scatter.num) || 0, 0);
+  const img = scatter && scatter.img_url;
+  if (Array.isArray(img)) {
+    return img.filter((item) => typeof item === "string" && item);
+  }
+  if (typeof img !== "string" || !img) return [];
+  const count = num > 0 ? num : 1;
+  const out = [];
+  for (let i = 0; i < count; i += 1) out.push(img);
+  return out;
+};
+
+/** 对齐记录页：scatter_info 追加进中奖线，展示为「特殊玩法」。 */
 export const pickLineInfos = (info) => {
   if (!info || typeof info !== "object") return [];
   const isAllLines = Number(info.is_all_lines || 0);
@@ -543,5 +557,23 @@ export const pickLineInfos = (info) => {
         ? info.m_list_info
         : info.lines_info;
   }
-  return Array.isArray(source) ? source : [];
+  const lines = Array.isArray(source) ? source.slice() : [];
+  const scatters = Array.isArray(info.scatter_info) ? info.scatter_info : [];
+  scatters.forEach((scatter) => {
+    if (!scatter || typeof scatter !== "object") return;
+    const symbols = scatterSymbols(scatter);
+    lines.push({
+      special: true,
+      bets: scatter.bets,
+      times: scatter.times,
+      bonus: scatter.bonus,
+      line_id: "特殊玩法",
+      line_shape_url: "",
+      direction: "",
+      symbol: symbols,
+      img_url: symbols,
+      ts: 0,
+    });
+  });
+  return lines;
 };
