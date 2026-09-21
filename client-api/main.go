@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"app/esindex"
 	"client-api/cache"
 	"client-api/common"
 	"client-api/config"
@@ -84,6 +87,7 @@ func run(_ *cobra.Command, _ []string) {
 	gameMap := dao.NewGameMap(gameMapRaw)
 
 	zap.L().Info("client-api start",
+		zap.String("ip", cfg.ServerIp),
 		zap.Int("port", cfg.ServerPort),
 		zap.Strings("redis", cfg.Redis.Host),
 		zap.Strings("elastic", cfg.Elastic.Host),
@@ -91,15 +95,29 @@ func run(_ *cobra.Command, _ []string) {
 		zap.Int("rateQPS", cfg.RateLimit.QPS),
 		zap.Int("gameMapSize", len(gameMapRaw)))
 
+	ns, err := dao.NewDefNamingService(dao.Redis(), esindex.ServiceName("clientapi"), cfg.ServerIp, int32(cfg.ServerPort))
+	if err != nil {
+		zap.L().Fatal("注册 client-api 失败", zap.Error(err))
+	}
+
 	r := controller.NewRouter(controller.RouterDeps{
 		Guard:          guard,
 		Limiter:        limiter,
 		GameMap:        gameMap,
 		InternalAPIKey: cfg.InternalAPIKey,
 	})
-	if err := r.Run(fmt.Sprintf(":%d", cfg.ServerPort)); err != nil {
-		zap.L().Fatal("HTTP 启动失败", zap.Error(err))
-	}
+	go func() {
+		if runErr := r.Run(fmt.Sprintf(":%d", cfg.ServerPort)); runErr != nil {
+			ns.ClearRegistryInfo()
+			zap.L().Fatal("HTTP 启动失败", zap.Error(runErr))
+		}
+	}()
+
+	exitC := make(chan os.Signal, 1)
+	signal.Notify(exitC, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	sig := <-exitC
+	zap.L().Info("收到退出信号", zap.String("signal", sig.String()))
+	ns.ClearRegistryInfo()
 }
 
 func main() {

@@ -21,6 +21,7 @@ elastic:
     - "http://172.21.211.214:9200"
   username: "elastic"
   password: "000000"
+server_ip: "172.21.211.214"
 server_port: 11037
 cache:
   memory_ttl_seconds: 5

@@ -33,6 +33,7 @@ type RunConfig struct {
 		Burst int `yaml:"burst"`
 	} `yaml:"rate_limit"`
 	Games          map[string]string `yaml:"games"`
+	ServerIp       string            `yaml:"server_ip"`
 	ServerPort     int               `yaml:"server_port"`
 	InternalAPIKey string            `yaml:"internal_api_key"`
 	Log            string            `yaml:"log"`
@@ -41,6 +42,9 @@ type RunConfig struct {
 func (c *RunConfig) Validate() error {
 	if c == nil {
 		return fmt.Errorf("config is nil")
+	}
+	if strings.TrimSpace(c.ServerIp) == "" {
+		return fmt.Errorf("server_ip required")
 	}
 	if c.ServerPort <= 0 || c.ServerPort > 65535 {
 		return fmt.Errorf("server_port invalid")

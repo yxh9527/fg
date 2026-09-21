@@ -60,6 +60,34 @@ func (r *RedisDao) Ping() error {
 	return r.cli.Ping(context.Background()).Err()
 }
 
+func (r *RedisDao) Set(key, value string, timeout int32) error {
+	if r == nil || r.cli == nil {
+		return errors.New("redis not initialized")
+	}
+	var to time.Duration
+	if timeout > 0 {
+		to = time.Duration(timeout) * time.Second
+	}
+	return r.cli.Set(context.Background(), key, value, to).Err()
+}
+
+func (r *RedisDao) Del(key string) error {
+	if r == nil || r.cli == nil {
+		return errors.New("redis not initialized")
+	}
+	return r.cli.Del(context.Background(), key).Err()
+}
+
+func (r *RedisDao) SetKeyTimeOut(key string, timeout int32) (bool, error) {
+	if r == nil || r.cli == nil {
+		return false, errors.New("redis not initialized")
+	}
+	if timeout < 0 {
+		return r.cli.Persist(context.Background(), key).Result()
+	}
+	return r.cli.Expire(context.Background(), key, time.Duration(timeout)*time.Second).Result()
+}
+
 func normalizeSessionKey(token string) string {
 	token = strings.TrimSpace(token)
 	if token == "" {
