@@ -139,6 +139,17 @@ func (r *RedisDao) GetPlayer(userId uint32) (*PlayerCache, error) {
 	return p, nil
 }
 
+func (r *RedisDao) GetUserTotalEffBet(userId uint32) float64 {
+	if r == nil || r.cli == nil || userId == 0 {
+		return 0
+	}
+	score, err := r.cli.ZScore(context.Background(), "userTotalEffBet", strconv.FormatUint(uint64(userId), 10)).Result()
+	if err != nil {
+		return 0
+	}
+	return score
+}
+
 func (r *RedisDao) GetPlayerCurrencyCent(userId uint32) (int64, error) {
 	if userId == 0 {
 		return 0, fmt.Errorf("userId required")

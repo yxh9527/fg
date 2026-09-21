@@ -63,6 +63,7 @@ func run(_ *cobra.Command, _ []string) {
 	if err := dao.DB().Ping(); err != nil {
 		zap.L().Fatal("MySQL 自检失败", zap.Error(err))
 	}
+	dao.InitApiConfigMgr()
 	if err := dao.InitES(cfg); err != nil {
 		zap.L().Fatal("初始化 ES 失败", zap.Error(err))
 	}

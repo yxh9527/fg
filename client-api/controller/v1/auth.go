@@ -69,13 +69,17 @@ func (h *AuthHandler) Authenticate(c *gin.Context) {
 		common.Fail(c, http.StatusOK, common.CodeUnauthorized, firstNonEmpty(payload.Message, "未登录"))
 		return
 	}
-	common.OK(c, gin.H{
+	out := gin.H{
 		"success":      payload.Success,
 		"userId":       payload.UserId,
 		"isReEnter":    payload.IsReEnter,
 		"attemptCount": payload.AttemptCount,
 		"message":      payload.Message,
-	})
+	}
+	if node := dao.PickGateway(payload.UserId); node != nil {
+		out["gateway"] = node
+	}
+	common.OK(c, out)
 }
 
 func (h *AuthHandler) ValidateToken(c *gin.Context) {
@@ -154,7 +158,7 @@ func (h *AuthHandler) GetLoginData(c *gin.Context) {
 		common.Fail(c, http.StatusOK, common.CodeBadRequest, "用户不存在")
 		return
 	}
-	common.OK(c, gin.H{
+	out := gin.H{
 		"userId":     payload.UserId,
 		"userName":   payload.UserName,
 		"agentId":    payload.AgentId,
@@ -168,7 +172,11 @@ func (h *AuthHandler) GetLoginData(c *gin.Context) {
 			"symbol":       payload.Symbol,
 			"currencyRate": 1,
 		},
-	})
+	}
+	if node := dao.PickGateway(payload.UserId); node != nil {
+		out["gateway"] = node
+	}
+	common.OK(c, out)
 }
 
 func firstNonEmpty(a, b string) string {

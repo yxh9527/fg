@@ -80,6 +80,17 @@ func (d *DBDao) GetGameByNumber(number int64) *manager.Game {
 	return g
 }
 
+func (d *DBDao) GetUserTotalEffBet(userId uint32) float64 {
+	if d == nil || userId == 0 {
+		return 0
+	}
+	u := &manager.User{}
+	if err := d.manager.Select("totalEffBet").Where("id = ?", userId).Take(u).Error; err != nil {
+		return 0
+	}
+	return u.TotalEffBet
+}
+
 func (d *DBDao) GetPlayer(userId uint32) (*player.Player, error) {
 	if d == nil || userId == 0 {
 		return nil, gorm.ErrRecordNotFound
