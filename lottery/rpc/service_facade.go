@@ -252,7 +252,7 @@ func (d *LotteryService) SlotsDoBet(ctx context.Context, req *services.SlotsDoBe
 	}
 
 	idemKey := buildIdempotencyKey("slotsDoBet", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId)
-	idemSig := idempotencySignature(bet.String(), win.String(), preWin.String(), req.RecordJson, req.Account)
+	idemSig := idempotencySignature(bet.String(), win.String(), preWin.String(), req.RecordJson, req.Account, decimal.NewFromFloat(req.AverageBet).String())
 	if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
 		msg := ""
 		if code == services.ErrorCode_PARAMS_INVALID {
@@ -279,6 +279,7 @@ func (d *LotteryService) SlotsDoBet(ctx context.Context, req *services.SlotsDoBe
 		MaxProfitLoss: preWin.String(),
 		Complete:      true,
 		Account:       req.Account,
+		AverageBet:    req.AverageBet,
 	})
 	if callErr != nil {
 		d.abortIdempotency(idemKey)

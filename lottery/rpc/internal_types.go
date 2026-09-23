@@ -16,6 +16,7 @@ type slotsLotteryReq struct {
 	MaxProfitLoss string
 	Complete      bool
 	Account       string
+	AverageBet    float64 // 购买免费触发局才带值；>0 时用其计算可赔付上限
 }
 
 type slotsLotteryResp struct {

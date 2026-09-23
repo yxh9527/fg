@@ -109,6 +109,7 @@ message SlotsDoBetReq {
     string recordJson = 10;  // UserRecordInfo JSON；同时作为注单 log
     repeated GameStorageItem gameStorage = 11;
     SlotDoBetFlowControl flowControl = 12;
+    double averageBet = 13;  // 购买免费触发局才带值：整段免费按赠送次数折算的每转平均下注（元）；其余为 0
 }
 
 message SlotsDoBetFreeReq {
@@ -124,6 +125,7 @@ message SlotsDoBetFreeReq {
     bool complete = 10;
     repeated GameStorageItem gameStorage = 11;
     SlotDoBetFlowControl flowControl = 12;
+    double averageBet = 13;  // 购买免费触发局才带值：整段免费按赠送次数折算的每转平均下注（元）；其余为 0
 }
 
 message SlotsDoBetResp {
@@ -144,6 +146,7 @@ message FruitDoBetReq {
     string winAmount = 7;
     string recordJson = 8;
     bool complete = 9;
+    double averageBet = 13;  // 购买免费触发局才带值：整段免费按赠送次数折算的每转平均下注（元）；其余为 0
 }
 
 message FruitDoBetResp {
