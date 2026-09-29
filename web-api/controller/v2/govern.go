@@ -38,7 +38,7 @@ func GovernList(ctx *gin.Context) {
 	poolDatas := make([]*view.PoolData, 0)
 	if agentId >= 0 {
 		for _, game := range games {
-			// /agent/{agentId}/pool/{symbol}
+			// /fg/agent/{agentId}/pool/{symbol}
 			key := esindex.AgentKey(fmt.Sprintf("%d", agentId), "pool", game.ConfName)
 			c := config.CfgIns.GetPoolCfgByGameId(int64(agentId), int64(game.Number))
 			pd := &view.PoolData{
@@ -50,7 +50,7 @@ func GovernList(ctx *gin.Context) {
 		}
 	} else {
 		for _, game := range games {
-			// /config/pool/{symbol}
+			// /fg/config/pool/{symbol}
 			key := esindex.ConfigKey("pool", game.ConfName)
 			c := config.CfgIns.GetPoolDefaultCfgByGameId(int64(game.Number))
 			pd := &view.PoolData{
@@ -117,10 +117,19 @@ func PoolResetNow(ctx *gin.Context) {
 
 // 修改水池配置
 func PoolEdit(ctx *gin.Context) {
-	key := ctx.Query("key")
+	rawKey := ctx.Query("key")
+	key := esindex.NormalizeKey(rawKey)
 	value := ctx.Query("value")
 	if value == "" || key == "" {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "系统异常", Data: nil})
+		return
+	}
+	section, rest := esindex.ParsePath(key)
+	isDefaultPool := section == "config" && len(rest) >= 2 && rest[0] == "pool"
+	isAgentPool := section == "agent" && len(rest) >= 3 && rest[1] == "pool"
+	if !isDefaultPool && !isAgentPool {
+		zap.L().Error("水池配置key异常", zap.String("key", rawKey), zap.String("normalized", key))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "配置key异常", Data: nil})
 		return
 	}
 	pool := &config.Pool{}
@@ -129,22 +138,30 @@ func PoolEdit(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "系统异常", Data: nil})
 		return
 	}
+	if err = dao.UpsertPoolConfig(key, value); err != nil {
+		zap.L().Error("保存水池配置到数据库失败", zap.Any("err", err), zap.String("key", key))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "系统异常", Data: nil})
+		return
+	}
 	err = dao.RedisIns().Set(key, value, -1)
 	if err != nil {
 		zap.L().Error("保存配置失败", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "系统异常", Data: nil})
-	} else {
-		dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
-			"key":  key,
-			"data": value,
-		})
-		str, _ := jsoniter.MarshalToString(map[string]interface{}{
-			"event": "config",
-			"data":  dataStr,
-		})
-		dao.RedisIns().Publish("message", str)
-		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
+		return
 	}
+	if rawKey != key {
+		_ = dao.RedisIns().Del(rawKey)
+	}
+	dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
+		"key":  key,
+		"data": value,
+	})
+	str, _ := jsoniter.MarshalToString(map[string]interface{}{
+		"event": "config",
+		"data":  dataStr,
+	})
+	dao.RedisIns().Publish("message", str)
+	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
 }
 
 func GovernPlayer(ctx *gin.Context) {

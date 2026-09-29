@@ -372,6 +372,7 @@ import {
 import { formatDateTime, toAmount } from "./controlHelpers";
 
 const createPoolForm = () => ({
+  key: "",
   gameId: null,
   name: "",
   nameZH: "",
@@ -864,9 +865,10 @@ export default {
         symbol: this.poolForm.symbol,
       };
       const key =
-        this.selectedAgentId !== null
+        this.poolForm.key ||
+        (this.selectedAgentId !== null
           ? `/agent/${this.selectedAgentId}/pool/${this.poolForm.symbol}`
-          : `/config/pool/${this.poolForm.symbol}`;
+          : `/config/pool/${this.poolForm.symbol}`);
       await updateGovernPoolConfig({ key, value });
       this.$message.success("房间配置已保存");
       this.poolDialogVisible = false;

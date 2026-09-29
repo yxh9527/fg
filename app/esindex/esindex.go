@@ -40,6 +40,26 @@ func AgentKey(agentId string, parts ...string) string {
 func ConfigPattern() string { return PathRoot() + "/config/*" }
 func AgentPattern() string  { return PathRoot() + "/agent/*" }
 
+// NormalizeKey 将配置路径规范为带 Prefix 的 Redis key。
+// 已带前缀：/fg/config/pool/bxjg => 原样返回
+// 旧格式：/config/pool/bxjg、/agent/1/pool/bxjg => 补上 /{Prefix}
+// 空串或无法识别则返回空字符串。
+func NormalizeKey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	key = "/" + strings.Trim(key, "/")
+	if MatchKeyPrefix(key) {
+		return key
+	}
+	section := strings.Split(strings.Trim(key, "/"), "/")[0]
+	if section == "config" || section == "agent" {
+		return PathRoot() + key
+	}
+	return ""
+}
+
 // MatchKeyPrefix 校验 key 分割后第一段是否等于 Prefix。
 // 例：Prefix=fg，key=/fg/config/system => true；key=/pp/config/system => false。
 func MatchKeyPrefix(key string) bool {
