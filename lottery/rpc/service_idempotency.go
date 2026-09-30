@@ -127,6 +127,30 @@ func (d *LotteryService) abortIdempotency(key string) {
 	}
 }
 
+// 百人加注/退注每次都是独立扣退。游戏服 roundId 常为 mp-{gameId}-{userId}，
+// 同一玩家同一游戏会连续不同金额、不同区域加注，不能按 roundId 做完成态幂等。
+// 这里只做短占位，挡住进行中的并发重入。
+const multiOpLockTTLSeconds int32 = 5
+
+func (d *LotteryService) beginMultiOpLock(key string) services.ErrorCode {
+	if strings.TrimSpace(key) == "" {
+		return services.ErrorCode_SYSTEM_ERROR
+	}
+	ok, err := d.rds.SetNX(key, "1", multiOpLockTTLSeconds)
+	if err != nil {
+		zap.L().Error("multi-op lock failed", zap.String("key", key), zap.Error(err))
+		return services.ErrorCode_SYSTEM_ERROR
+	}
+	if !ok {
+		return services.ErrorCode_SYSTEM_ERROR
+	}
+	return services.ErrorCode_OK
+}
+
+func (d *LotteryService) endMultiOpLock(key string) {
+	d.abortIdempotency(key)
+}
+
 func restoreSlotsDoBetResp(payload string) (*services.SlotsDoBetResp, services.ErrorCode) {
 	resp := &services.SlotsDoBetResp{}
 	if err := jsoniter.UnmarshalFromString(payload, resp); err != nil {

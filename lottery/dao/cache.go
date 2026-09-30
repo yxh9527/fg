@@ -27,7 +27,7 @@ var singleCtrl *SingleCtrlMgr = nil
 // 玩家数据对象
 type User struct {
 	TotalEffectBet decimal.Decimal //总有效投注
-	TotalProfLoss  decimal.Decimal //玩家亏损累计（仅 award<0 时加 |award|）
+	TotalProfLoss  decimal.Decimal //玩家总返奖累计（完局直接加 award，award 不会为负）
 	Count          decimal.Decimal //下注局数
 	UpdateTime     int64           //更新时间
 	UserId         uint32          //玩家id
@@ -57,14 +57,12 @@ func addGamePayout(game *Game, award decimal.Decimal) {
 	}
 }
 
-// addUserLoss FG：仅 award<0 计入玩家亏损，取绝对值。
-func addUserLoss(user *User, award decimal.Decimal) {
+// addUserAward 玩家总返奖：award 不会为负，完局直接累加。
+func addUserAward(user *User, award decimal.Decimal) {
 	if user == nil {
 		return
 	}
-	if award.LessThan(decimal.Zero) {
-		user.TotalProfLoss = user.TotalProfLoss.Add(award.Abs().Truncate(4))
-	}
+	user.TotalProfLoss = user.TotalProfLoss.Add(award.Truncate(4))
 }
 
 // positiveAward 水池预判只用正赔付，负 award（玩家亏损）不占赔付额度。
@@ -333,12 +331,12 @@ func (gcm *GameCacheMgr) Complete(agentId int64, userId uint32, symbol string, b
 		// game.TotalRevenue = game.TotalRevenue.Add(bet.Mul(rate).Truncate(4))
 		game.UpdateTime = time.Now().Unix()
 		user.Count = user.Count.Add(decimal.NewFromInt(1))
-		addUserLoss(user, award)
+		addUserAward(user, award)
 		user.UpdateTime = time.Now().Unix()
 	}
 }
 
-// 返还水池（仅退代理游戏预占/多扣赔付，不改玩家亏损累计）
+// 返还水池（仅退代理游戏预占/多扣赔付，不改玩家总返奖累计）
 func (gcm *GameCacheMgr) ReturnPool(agentId int64, userId uint32, symbol string, delta decimal.Decimal) {
 	agent := gcm.GetAgent(agentId)
 	//细分代理锁

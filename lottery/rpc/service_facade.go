@@ -626,6 +626,7 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 
 // FruitDoBetMulti 百人扣款门面。
 // 规则 A：复用 doMultiBet → deductBet（扣余额 + 改水池 + 流水）。
+// 每次调用都是一次独立加注；roundId 常为 mp-{gameId}-{userId}，不能按局号做完成态幂等。
 func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.FruitDoBetMultiReq) (resp *services.FruitDoBetMultiResp, err error) {
 	resp = &services.FruitDoBetMultiResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -643,16 +644,9 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 		return failFruitDoBetMulti(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 
-	idemKey := buildIdempotencyKey("fruitDoBetMulti", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId)
-	idemSig := idempotencySignature(bet.String(), u32Str(req.AreaId))
-	if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
+	lockKey := buildIdempotencyKey("fruitDoBetMultiLock", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId, u32Str(req.AreaId), bet.String())
+	if code := d.beginMultiOpLock(lockKey); code != services.ErrorCode_OK {
 		return failFruitDoBetMulti(resp, code)
-	} else if hit {
-		if cached, rCode := restoreFruitDoBetMultiResp(payload); rCode != services.ErrorCode_OK {
-			return failFruitDoBetMulti(resp, rCode)
-		} else {
-			return cached, nil
-		}
 	}
 
 	betResp, callErr := d.doMultiBet(&multiBetReq{
@@ -664,8 +658,8 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 		AgentId:      req.AgentId,
 		CurrencyType: req.CurrencyType,
 	})
+	d.endMultiOpLock(lockKey)
 	if callErr != nil {
-		d.abortIdempotency(idemKey)
 		zap.L().Error("FruitDoBetMulti call doMultiBet failed",
 			zap.Uint32("userId", req.UserId),
 			zap.String("roundId", req.RoundId),
@@ -673,17 +667,14 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 		return failFruitDoBetMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
 	if betResp == nil {
-		d.abortIdempotency(idemKey)
 		return failFruitDoBetMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
 	// 在 deductBet 失败时可能仍返回 OK 且 currency 为空，门面按失败处理。
 	if betResp.Code != services.ErrorCode_OK {
-		d.abortIdempotency(idemKey)
 		resp.Code = betResp.Code
 		return resp, nil
 	}
 	if strings.TrimSpace(betResp.Currency) == "" {
-		d.abortIdempotency(idemKey)
 		zap.L().Error("FruitDoBetMulti empty currency after bet",
 			zap.Uint32("userId", req.UserId),
 			zap.String("roundId", req.RoundId),
@@ -693,11 +684,6 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 
 	resp.Ret = true
 	resp.Currency, resp.CurrencyCent = fillBalanceResp(betResp.Currency)
-	if raw, mErr := jsoniter.MarshalToString(resp); mErr == nil {
-		d.commitIdempotency(idemKey, idemSig, raw)
-	} else {
-		d.abortIdempotency(idemKey)
-	}
 	zap.L().Debug("FruitDoBetMulti success",
 		zap.Uint32("userId", req.UserId),
 		zap.Uint32("agentId", req.AgentId),
@@ -710,6 +696,7 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 
 // FruitRefundMulti 百人退款门面。
 // 规则 A：复用 doMultiRefund → refundBet（退余额 + 回滚水池 + 流水）。
+// 与加注一样按次独立退款，不做 roundId 完成态幂等。
 func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.FruitRefundMultiReq) (resp *services.FruitRefundMultiResp, err error) {
 	resp = &services.FruitRefundMultiResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -727,16 +714,9 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 		return failFruitRefundMulti(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 
-	idemKey := buildIdempotencyKey("fruitRefundMulti", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId)
-	idemSig := idempotencySignature(bet.String())
-	if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
+	lockKey := buildIdempotencyKey("fruitRefundMultiLock", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId, bet.String())
+	if code := d.beginMultiOpLock(lockKey); code != services.ErrorCode_OK {
 		return failFruitRefundMulti(resp, code)
-	} else if hit {
-		if cached, rCode := restoreFruitRefundMultiResp(payload); rCode != services.ErrorCode_OK {
-			return failFruitRefundMulti(resp, rCode)
-		} else {
-			return cached, nil
-		}
 	}
 
 	betResp, callErr := d.doMultiRefund(&multiRefundReq{
@@ -747,8 +727,8 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 		AgentId:      req.AgentId,
 		CurrencyType: req.CurrencyType,
 	})
+	d.endMultiOpLock(lockKey)
 	if callErr != nil {
-		d.abortIdempotency(idemKey)
 		zap.L().Error("FruitRefundMulti call doMultiRefund failed",
 			zap.Uint32("userId", req.UserId),
 			zap.String("roundId", req.RoundId),
@@ -756,16 +736,13 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 		return failFruitRefundMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
 	if betResp == nil {
-		d.abortIdempotency(idemKey)
 		return failFruitRefundMulti(resp, services.ErrorCode_SYSTEM_ERROR)
 	}
 	if betResp.Code != services.ErrorCode_OK {
-		d.abortIdempotency(idemKey)
 		resp.Code = betResp.Code
 		return resp, nil
 	}
 	if strings.TrimSpace(betResp.Currency) == "" {
-		d.abortIdempotency(idemKey)
 		zap.L().Error("FruitRefundMulti empty currency after refund",
 			zap.Uint32("userId", req.UserId),
 			zap.String("roundId", req.RoundId),
@@ -775,11 +752,6 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 
 	resp.Ret = true
 	resp.Currency, resp.CurrencyCent = fillBalanceResp(betResp.Currency)
-	if raw, mErr := jsoniter.MarshalToString(resp); mErr == nil {
-		d.commitIdempotency(idemKey, idemSig, raw)
-	} else {
-		d.abortIdempotency(idemKey)
-	}
 	zap.L().Debug("FruitRefundMulti success",
 		zap.Uint32("userId", req.UserId),
 		zap.Uint32("agentId", req.AgentId),

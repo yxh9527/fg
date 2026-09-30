@@ -20,3 +20,5 @@
 .vscode
 
 logs/
+
+lottery/cmd/
