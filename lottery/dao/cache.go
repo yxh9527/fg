@@ -619,12 +619,6 @@ func (gcm *GameCacheMgr) Lottery(agentId int64, userId int32, pc *config.Pool, s
 		}
 	}
 	item := cItems.PoolOdds[t]
-	//TODO:wg 新版不做概率限制
-	// n := gcm.gcmRand.Intn(100)
-	// if decimal.NewFromInt(int64(n)).GreaterThan(item.Odds) {
-	// 	zap.L().Debug("Lottery:开奖失败", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("n", n), zap.Any("开奖配置", item))
-	// 	return pool, false
-	// }
 	zap.L().Debug("Lottery:pool配置", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("rate", rate), zap.Any("水池状态", t), zap.Any("item", cItems))
 	//水池余额*百分比
 	p1 := pool.Mul(r)
