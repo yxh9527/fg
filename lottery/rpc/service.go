@@ -678,19 +678,6 @@ func (d *LotteryService) SlotsLottery(_ context.Context, req *slotsLotteryReq) (
 		return resp, nil
 	}
 
-	// ur := &entity.UserRecordInfo{}
-	// err = jsoniter.UnmarshalFromString(req.State, ur)
-	// if err == nil && !validateUserRecordInfo(ur) {
-	// 	zap.L().Error("invalid user record info",
-	// 		zap.Any("userId", req.PlayerId),
-	// 		zap.Any("symbol", eGame.ConfName),
-	// 		zap.Any("agentId", req.AgentId),
-	// 		zap.Any("gameId", req.GameId),
-	// 		zap.Any("state", req.State))
-	// 	resp.Result = false
-	// 	resp.Code = services.ErrorCode_PARAMS_INVALID
-	// 	return resp, nil
-	// }
 	if err != nil {
 		zap.L().Error("从游戏状态中获取注单信息失败",
 			zap.Any("userId", req.PlayerId),
