@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"app/config"
+	"app/tables/manager"
 	"lottery/dao"
 
 	jsoniter "github.com/json-iterator/go"
@@ -336,9 +337,10 @@ func (d *LotteryService) SlotsDoBet(ctx context.Context, req *services.SlotsDoBe
 }
 
 // SlotsDoBetFree 免费/奖励局门面。
-// 不重复扣本金。仅当 req.Complete=true 时走原 SlotsLottery.Complete（含统计）；
-// Complete=false 但有赢分/注单时只入账+写 ES 注单，不跑 Complete 统计；
-// 纯状态 action 可只提交 flowControl/gameStorage。
+// 不扣本金、不预扣水池、不走 MaxProfitLoss 对账。
+// Complete=true 只入账 + 写注单 + CacheIns().Complete 统计；
+// Complete=false 但有赢分/注单时只入账+写 ES，不跑 Complete 统计；
+// 未使用预占只能通过 flowControl.refundPoolAmount 退回。
 func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.SlotsDoBetFreeReq) (resp *services.SlotsDoBetResp, err error) {
 	resp = &services.SlotsDoBetResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -392,43 +394,14 @@ func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.Slots
 	currency := ""
 	// Complete 只由 req.Complete 控制，不能用 hasRecord/win 代替。
 	if req.Complete {
-		slotsResp, callErr := d.SlotsLottery(ctx, &slotsLotteryReq{
-			PlayerId:     req.UserId,
-			CurrencyType: req.CurrencyType,
-			AgentId:      int64(req.AgentId),
-			GameId:       req.GameId,
-			ProfitLoss:   win.String(),
-			Bet:          "0",
-			State:        req.RecordJson,
-			RoundID:      req.RoundId,
-			Complete:     true,
-			Account:      req.Account,
-		})
-		if callErr != nil {
+		nc, code := d.slotsFreeAward(req, win, totalBet, true)
+		if code != services.ErrorCode_OK {
 			d.abortIdempotency(idemKey)
-			zap.L().Error("SlotsDoBetFree call SlotsLottery failed",
-				zap.Uint32("userId", req.UserId),
-				zap.String("roundId", req.RoundId),
-				zap.Error(callErr))
-			return failSlotsDoBet(resp, services.ErrorCode_SYSTEM_ERROR, "")
+			return failSlotsDoBet(resp, code, "")
 		}
-		if slotsResp == nil {
-			d.abortIdempotency(idemKey)
-			return failSlotsDoBet(resp, services.ErrorCode_SYSTEM_ERROR, "")
-		}
-		if !slotsResp.Result || slotsResp.Code != services.ErrorCode_OK {
-			d.abortIdempotency(idemKey)
-			resp.Code = slotsResp.Code
-			resp.Ret = false
-			resp.Error = slotErrorName(slotsResp.Code)
-			if slotsResp.NewCurrency != "" {
-				resp.Currency, resp.CurrencyCent = fillBalanceResp(slotsResp.NewCurrency)
-			}
-			return resp, nil
-		}
-		currency = slotsResp.NewCurrency
+		currency = nc.Truncate(2).StringFixed(2)
 	} else if win.GreaterThan(decimal.Zero) || hasRecord {
-		nc, code := d.slotsFreeAwardWithoutComplete(req, win, totalBet)
+		nc, code := d.slotsFreeAward(req, win, totalBet, false)
 		if code != services.ErrorCode_OK {
 			return failSlotsDoBet(resp, code, "")
 		}
@@ -477,15 +450,41 @@ func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.Slots
 	return resp, nil
 }
 
-// slotsFreeAwardWithoutComplete 免费局中间步骤：只返奖/写 ES 注单，不调用 CacheIns().Complete。
-func (d *LotteryService) slotsFreeAwardWithoutComplete(req *services.SlotsDoBetFreeReq, win, totalBet decimal.Decimal) (decimal.Decimal, services.ErrorCode) {
+// slotsFreeAward 免费局入账。不扣本金、不预扣、不对账 RoundCache。
+// complete=true 时补 CacheIns().Complete 统计；水池预占只走 flowControl.refundPoolAmount。
+func (d *LotteryService) slotsFreeAward(req *services.SlotsDoBetFreeReq, win, totalBet decimal.Decimal, complete bool) (decimal.Decimal, services.ErrorCode) {
 	eAgent := dao.AgentManagerIns().Get(int64(req.AgentId))
-	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
 	if eAgent == nil {
-		return decimal.Zero, services.ErrorCode_AGENT_FROZEN
+		if req.AgentId == 0 {
+			eAgent = &manager.Agent{Id: 0, WebId: 0}
+		} else {
+			return decimal.Zero, services.ErrorCode_AGENT_FROZEN
+		}
 	}
+	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
 	if eGame == nil {
 		return decimal.Zero, services.ErrorCode_PARAMS_INVALID
+	}
+
+	var exchange decimal.Decimal
+	var pc *config.Pool
+	if complete {
+		ex, ok := config.CfgIns.GetExchange(req.CurrencyType)
+		if !ok {
+			zap.L().Error("SlotsDoBetFree get exchange failed",
+				zap.String("currencyType", req.CurrencyType),
+				zap.String("roundId", req.RoundId))
+			return decimal.Zero, services.ErrorCode_SYSTEM_ERROR
+		}
+		exchange = ex
+		pc = config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
+		if pc == nil {
+			zap.L().Error("SlotsDoBetFree get pool cfg failed",
+				zap.Uint32("agentId", req.AgentId),
+				zap.String("roundId", req.RoundId),
+				zap.String("symbol", eGame.ConfName))
+			return decimal.Zero, services.ErrorCode_SYSTEM_ERROR
+		}
 	}
 
 	var newCurrency int64
@@ -519,18 +518,34 @@ func (d *LotteryService) slotsFreeAwardWithoutComplete(req *services.SlotsDoBetF
 			req.RecordJson,
 			nc,
 			uint32(eAgent.WebId),
-			false,
+			complete,
 			totalBet.InexactFloat64(),
 			win.InexactFloat64(),
 		)
 		d.SaveRecord(record)
-		if win.GreaterThan(decimal.Zero) {
+		if complete {
+			zap.L().Info("SlotsDoBetFree:注单信息",
+				zap.Uint32("agentId", req.AgentId),
+				zap.Uint32("playerId", req.UserId),
+				zap.Uint32("gameId", req.GameId),
+				zap.String("symbol", eGame.ConfName),
+				zap.String("roundId", req.RoundId),
+				zap.Any("record", record))
+		}
+		if complete || win.GreaterThan(decimal.Zero) {
 			billBet := decimal.Zero
 			if totalBet.GreaterThan(decimal.Zero) {
 				billBet = totalBet.Neg()
 			}
-			d.SaveBill(req.AgentId, req.UserId, billBet, win, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundId)
+			billAward := decimal.Zero
+			if win.GreaterThan(decimal.Zero) {
+				billAward = win
+			}
+			d.SaveBill(req.AgentId, req.UserId, billBet, billAward, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundId)
 		}
+	}
+	if complete {
+		dao.CacheIns().Complete(int64(req.AgentId), req.UserId, eGame.ConfName, totalBet.Mul(exchange), win.Mul(exchange), pc.Pool[1].Revenue)
 	}
 	return nc, services.ErrorCode_OK
 }
