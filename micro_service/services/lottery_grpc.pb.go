@@ -26,10 +26,12 @@ const (
 	LotteryService_DeleteGameStorage_FullMethodName = "/lottery.LotteryService/DeleteGameStorage"
 	LotteryService_SlotsDoBet_FullMethodName        = "/lottery.LotteryService/SlotsDoBet"
 	LotteryService_SlotsDoBetFree_FullMethodName    = "/lottery.LotteryService/SlotsDoBetFree"
+	LotteryService_Ug5Guess_FullMethodName          = "/lottery.LotteryService/Ug5Guess"
 	LotteryService_FruitDoBet_FullMethodName        = "/lottery.LotteryService/FruitDoBet"
 	LotteryService_FruitDoBetMulti_FullMethodName   = "/lottery.LotteryService/FruitDoBetMulti"
 	LotteryService_FruitRefundMulti_FullMethodName  = "/lottery.LotteryService/FruitRefundMulti"
 	LotteryService_FruitSettleRound_FullMethodName  = "/lottery.LotteryService/FruitSettleRound"
+	LotteryService_SetUserIcon_FullMethodName       = "/lottery.LotteryService/SetUserIcon"
 )
 
 // LotteryServiceClient is the client API for LotteryService service.
@@ -47,10 +49,13 @@ type LotteryServiceClient interface {
 	// 新服正式环境门面
 	SlotsDoBet(ctx context.Context, in *SlotsDoBetReq, opts ...grpc.CallOption) (*SlotsDoBetResp, error)
 	SlotsDoBetFree(ctx context.Context, in *SlotsDoBetFreeReq, opts ...grpc.CallOption) (*SlotsDoBetResp, error)
+	// UG5 竞猜：每次增量结算，complete 时才写整链注单
+	Ug5Guess(ctx context.Context, in *Ug5GuessReq, opts ...grpc.CallOption) (*Ug5GuessResp, error)
 	FruitDoBet(ctx context.Context, in *FruitDoBetReq, opts ...grpc.CallOption) (*FruitDoBetResp, error)
 	FruitDoBetMulti(ctx context.Context, in *FruitDoBetMultiReq, opts ...grpc.CallOption) (*FruitDoBetMultiResp, error)
 	FruitRefundMulti(ctx context.Context, in *FruitRefundMultiReq, opts ...grpc.CallOption) (*FruitRefundMultiResp, error)
 	FruitSettleRound(ctx context.Context, in *FruitSettleRoundReq, opts ...grpc.CallOption) (*FruitSettleRoundResp, error)
+	SetUserIcon(ctx context.Context, in *SetUserIconReq, opts ...grpc.CallOption) (*SetUserIconResp, error)
 }
 
 type lotteryServiceClient struct {
@@ -131,6 +136,16 @@ func (c *lotteryServiceClient) SlotsDoBetFree(ctx context.Context, in *SlotsDoBe
 	return out, nil
 }
 
+func (c *lotteryServiceClient) Ug5Guess(ctx context.Context, in *Ug5GuessReq, opts ...grpc.CallOption) (*Ug5GuessResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Ug5GuessResp)
+	err := c.cc.Invoke(ctx, LotteryService_Ug5Guess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *lotteryServiceClient) FruitDoBet(ctx context.Context, in *FruitDoBetReq, opts ...grpc.CallOption) (*FruitDoBetResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FruitDoBetResp)
@@ -171,6 +186,16 @@ func (c *lotteryServiceClient) FruitSettleRound(ctx context.Context, in *FruitSe
 	return out, nil
 }
 
+func (c *lotteryServiceClient) SetUserIcon(ctx context.Context, in *SetUserIconReq, opts ...grpc.CallOption) (*SetUserIconResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetUserIconResp)
+	err := c.cc.Invoke(ctx, LotteryService_SetUserIcon_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LotteryServiceServer is the server API for LotteryService service.
 // All implementations must embed UnimplementedLotteryServiceServer
 // for forward compatibility.
@@ -186,10 +211,13 @@ type LotteryServiceServer interface {
 	// 新服正式环境门面
 	SlotsDoBet(context.Context, *SlotsDoBetReq) (*SlotsDoBetResp, error)
 	SlotsDoBetFree(context.Context, *SlotsDoBetFreeReq) (*SlotsDoBetResp, error)
+	// UG5 竞猜：每次增量结算，complete 时才写整链注单
+	Ug5Guess(context.Context, *Ug5GuessReq) (*Ug5GuessResp, error)
 	FruitDoBet(context.Context, *FruitDoBetReq) (*FruitDoBetResp, error)
 	FruitDoBetMulti(context.Context, *FruitDoBetMultiReq) (*FruitDoBetMultiResp, error)
 	FruitRefundMulti(context.Context, *FruitRefundMultiReq) (*FruitRefundMultiResp, error)
 	FruitSettleRound(context.Context, *FruitSettleRoundReq) (*FruitSettleRoundResp, error)
+	SetUserIcon(context.Context, *SetUserIconReq) (*SetUserIconResp, error)
 	mustEmbedUnimplementedLotteryServiceServer()
 }
 
@@ -221,6 +249,9 @@ func (UnimplementedLotteryServiceServer) SlotsDoBet(context.Context, *SlotsDoBet
 func (UnimplementedLotteryServiceServer) SlotsDoBetFree(context.Context, *SlotsDoBetFreeReq) (*SlotsDoBetResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method SlotsDoBetFree not implemented")
 }
+func (UnimplementedLotteryServiceServer) Ug5Guess(context.Context, *Ug5GuessReq) (*Ug5GuessResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method Ug5Guess not implemented")
+}
 func (UnimplementedLotteryServiceServer) FruitDoBet(context.Context, *FruitDoBetReq) (*FruitDoBetResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method FruitDoBet not implemented")
 }
@@ -232,6 +263,9 @@ func (UnimplementedLotteryServiceServer) FruitRefundMulti(context.Context, *Frui
 }
 func (UnimplementedLotteryServiceServer) FruitSettleRound(context.Context, *FruitSettleRoundReq) (*FruitSettleRoundResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method FruitSettleRound not implemented")
+}
+func (UnimplementedLotteryServiceServer) SetUserIcon(context.Context, *SetUserIconReq) (*SetUserIconResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetUserIcon not implemented")
 }
 func (UnimplementedLotteryServiceServer) mustEmbedUnimplementedLotteryServiceServer() {}
 func (UnimplementedLotteryServiceServer) testEmbeddedByValue()                        {}
@@ -380,6 +414,24 @@ func _LotteryService_SlotsDoBetFree_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LotteryService_Ug5Guess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Ug5GuessReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LotteryServiceServer).Ug5Guess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LotteryService_Ug5Guess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LotteryServiceServer).Ug5Guess(ctx, req.(*Ug5GuessReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _LotteryService_FruitDoBet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FruitDoBetReq)
 	if err := dec(in); err != nil {
@@ -452,6 +504,24 @@ func _LotteryService_FruitSettleRound_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LotteryService_SetUserIcon_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetUserIconReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LotteryServiceServer).SetUserIcon(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LotteryService_SetUserIcon_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LotteryServiceServer).SetUserIcon(ctx, req.(*SetUserIconReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LotteryService_ServiceDesc is the grpc.ServiceDesc for LotteryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -488,6 +558,10 @@ var LotteryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _LotteryService_SlotsDoBetFree_Handler,
 		},
 		{
+			MethodName: "Ug5Guess",
+			Handler:    _LotteryService_Ug5Guess_Handler,
+		},
+		{
 			MethodName: "FruitDoBet",
 			Handler:    _LotteryService_FruitDoBet_Handler,
 		},
@@ -502,6 +576,10 @@ var LotteryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FruitSettleRound",
 			Handler:    _LotteryService_FruitSettleRound_Handler,
+		},
+		{
+			MethodName: "SetUserIcon",
+			Handler:    _LotteryService_SetUserIcon_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

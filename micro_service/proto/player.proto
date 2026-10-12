@@ -25,6 +25,7 @@ message HumanPlayer {
 	string reward = 18;//赏金
 	int32  all_times = 19;//总手数
 	int32  isTourist = 20;//是否是游客账户
+	string ex_data = 21;//扩展数据
 }
 
 message PlayerStatistics {

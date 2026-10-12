@@ -23,5 +23,6 @@ func ConvertUserEntityToHumanPlayer(p *player.Player) *services.HumanPlayer {
 		CurrencyType:   p.CurrencyType,
 		AllTimes:       p.AllTimes,
 		IsTourist:      p.IsTourist,
+		ExData:         p.ExData,
 	}
 }

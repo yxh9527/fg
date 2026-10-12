@@ -21,6 +21,7 @@ type Player struct {
 	Revenue      decimal.Decimal `gorm:"column:revenue;default:0"`
 	AllTimes     int32           `gorm:"column:all_times;default:0;"`
 	IsTourist    int32           `gorm:"column:isTourist;default:0;comment:是否是游客账户 0 否  1 是" json:"isTourist"`
+	ExData       string          `gorm:"column:ex_data;type:text;" json:"ex_data"`
 }
 
 func (p *Player) TableName() string {

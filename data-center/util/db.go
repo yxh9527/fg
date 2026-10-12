@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"app/config"
+	"app/tables/player"
 
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
@@ -13,7 +14,7 @@ import (
 func InitDB(sysConfig *config.RunConfig) (*gorm.DB, *gorm.DB, error) {
 	m := sysConfig.Mysql["player"]
 	playerSource := fmt.Sprintf("%s:%s@(%s:%d)/%s?charset=utf8", m.User, m.Password, m.Host, m.Port, m.Database)
-	player, err := gorm.Open(mysql.Open(playerSource), &gorm.Config{})
+	playerDB, err := gorm.Open(mysql.Open(playerSource), &gorm.Config{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -23,5 +24,10 @@ func InitDB(sysConfig *config.RunConfig) (*gorm.DB, *gorm.DB, error) {
 	if me != nil {
 		return nil, nil, me
 	}
-	return player, mdb, nil
+	if !playerDB.Migrator().HasColumn(&player.Player{}, "ex_data") {
+		if err := playerDB.Migrator().AddColumn(&player.Player{}, "ExData"); err != nil {
+			return nil, nil, err
+		}
+	}
+	return playerDB, mdb, nil
 }

@@ -43,6 +43,7 @@ type HumanPlayer struct {
 	Reward         string                 `protobuf:"bytes,18,opt,name=reward,proto3" json:"reward,omitempty"`                      //赏金
 	AllTimes       int32                  `protobuf:"varint,19,opt,name=all_times,json=allTimes,proto3" json:"all_times,omitempty"` //总手数
 	IsTourist      int32                  `protobuf:"varint,20,opt,name=isTourist,proto3" json:"isTourist,omitempty"`               //是否是游客账户
+	ExData         string                 `protobuf:"bytes,21,opt,name=ex_data,json=exData,proto3" json:"ex_data,omitempty"`        //扩展数据
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -217,6 +218,13 @@ func (x *HumanPlayer) GetIsTourist() int32 {
 	return 0
 }
 
+func (x *HumanPlayer) GetExData() string {
+	if x != nil {
+		return x.ExData
+	}
+	return ""
+}
+
 type PlayerStatistics struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Times         uint32                 `protobuf:"varint,2,opt,name=times,proto3" json:"times,omitempty"`
@@ -281,7 +289,7 @@ var File_player_proto protoreflect.FileDescriptor
 
 const file_player_proto_rawDesc = "" +
 	"\n" +
-	"\fplayer.proto\x12\x06player\"\xb8\x04\n" +
+	"\fplayer.proto\x12\x06player\"\xd1\x04\n" +
 	"\vHumanPlayer\x12\x0e\n" +
 	"\x02Id\x18\x01 \x01(\rR\x02Id\x12\x1a\n" +
 	"\bNickname\x18\x02 \x01(\tR\bNickname\x12\"\n" +
@@ -304,7 +312,8 @@ const file_player_proto_rawDesc = "" +
 	"\x05value\x18\x11 \x01(\tR\x05value\x12\x16\n" +
 	"\x06reward\x18\x12 \x01(\tR\x06reward\x12\x1b\n" +
 	"\tall_times\x18\x13 \x01(\x05R\ballTimes\x12\x1c\n" +
-	"\tisTourist\x18\x14 \x01(\x05R\tisTourist\"N\n" +
+	"\tisTourist\x18\x14 \x01(\x05R\tisTourist\x12\x17\n" +
+	"\aex_data\x18\x15 \x01(\tR\x06exData\"N\n" +
 	"\x10PlayerStatistics\x12\x14\n" +
 	"\x05times\x18\x02 \x01(\rR\x05times\x12\x10\n" +
 	"\x03bet\x18\x03 \x01(\rR\x03bet\x12\x12\n" +

@@ -21,6 +21,110 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type SetUserIconReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        uint32                 `protobuf:"varint,1,opt,name=userId,proto3" json:"userId,omitempty"`
+	Icon          uint32                 `protobuf:"varint,2,opt,name=Icon,proto3" json:"Icon,omitempty"`
+	GameId        uint32                 `protobuf:"varint,3,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetUserIconReq) Reset() {
+	*x = SetUserIconReq{}
+	mi := &file_lottery_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUserIconReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUserIconReq) ProtoMessage() {}
+
+func (x *SetUserIconReq) ProtoReflect() protoreflect.Message {
+	mi := &file_lottery_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUserIconReq.ProtoReflect.Descriptor instead.
+func (*SetUserIconReq) Descriptor() ([]byte, []int) {
+	return file_lottery_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *SetUserIconReq) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *SetUserIconReq) GetIcon() uint32 {
+	if x != nil {
+		return x.Icon
+	}
+	return 0
+}
+
+func (x *SetUserIconReq) GetGameId() uint32 {
+	if x != nil {
+		return x.GameId
+	}
+	return 0
+}
+
+type SetUserIconResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          ErrorCode              `protobuf:"varint,1,opt,name=code,proto3,enum=base.ErrorCode" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetUserIconResp) Reset() {
+	*x = SetUserIconResp{}
+	mi := &file_lottery_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUserIconResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUserIconResp) ProtoMessage() {}
+
+func (x *SetUserIconResp) ProtoReflect() protoreflect.Message {
+	mi := &file_lottery_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUserIconResp.ProtoReflect.Descriptor instead.
+func (*SetUserIconResp) Descriptor() ([]byte, []int) {
+	return file_lottery_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SetUserIconResp) GetCode() ErrorCode {
+	if x != nil {
+		return x.Code
+	}
+	return ErrorCode_OK
+}
+
 type PoolAmountResultReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       uint32                 `protobuf:"varint,1,opt,name=agentId,proto3" json:"agentId,omitempty"`
@@ -32,7 +136,7 @@ type PoolAmountResultReq struct {
 
 func (x *PoolAmountResultReq) Reset() {
 	*x = PoolAmountResultReq{}
-	mi := &file_lottery_proto_msgTypes[0]
+	mi := &file_lottery_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +148,7 @@ func (x *PoolAmountResultReq) String() string {
 func (*PoolAmountResultReq) ProtoMessage() {}
 
 func (x *PoolAmountResultReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[0]
+	mi := &file_lottery_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +161,7 @@ func (x *PoolAmountResultReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PoolAmountResultReq.ProtoReflect.Descriptor instead.
 func (*PoolAmountResultReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{0}
+	return file_lottery_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *PoolAmountResultReq) GetAgentId() uint32 {
@@ -91,7 +195,7 @@ type PoolAmountResultResp struct {
 
 func (x *PoolAmountResultResp) Reset() {
 	*x = PoolAmountResultResp{}
-	mi := &file_lottery_proto_msgTypes[1]
+	mi := &file_lottery_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +207,7 @@ func (x *PoolAmountResultResp) String() string {
 func (*PoolAmountResultResp) ProtoMessage() {}
 
 func (x *PoolAmountResultResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[1]
+	mi := &file_lottery_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +220,7 @@ func (x *PoolAmountResultResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PoolAmountResultResp.ProtoReflect.Descriptor instead.
 func (*PoolAmountResultResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{1}
+	return file_lottery_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *PoolAmountResultResp) GetCode() ErrorCode {
@@ -142,7 +246,7 @@ type GetBalanceReq struct {
 
 func (x *GetBalanceReq) Reset() {
 	*x = GetBalanceReq{}
-	mi := &file_lottery_proto_msgTypes[2]
+	mi := &file_lottery_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -154,7 +258,7 @@ func (x *GetBalanceReq) String() string {
 func (*GetBalanceReq) ProtoMessage() {}
 
 func (x *GetBalanceReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[2]
+	mi := &file_lottery_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -167,7 +271,7 @@ func (x *GetBalanceReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBalanceReq.ProtoReflect.Descriptor instead.
 func (*GetBalanceReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{2}
+	return file_lottery_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetBalanceReq) GetUserId() uint32 {
@@ -188,7 +292,7 @@ type GetBalanceResp struct {
 
 func (x *GetBalanceResp) Reset() {
 	*x = GetBalanceResp{}
-	mi := &file_lottery_proto_msgTypes[3]
+	mi := &file_lottery_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -200,7 +304,7 @@ func (x *GetBalanceResp) String() string {
 func (*GetBalanceResp) ProtoMessage() {}
 
 func (x *GetBalanceResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[3]
+	mi := &file_lottery_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -213,7 +317,7 @@ func (x *GetBalanceResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBalanceResp.ProtoReflect.Descriptor instead.
 func (*GetBalanceResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{3}
+	return file_lottery_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetBalanceResp) GetCode() ErrorCode {
@@ -251,7 +355,7 @@ type SaveGameStorageReq struct {
 
 func (x *SaveGameStorageReq) Reset() {
 	*x = SaveGameStorageReq{}
-	mi := &file_lottery_proto_msgTypes[4]
+	mi := &file_lottery_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -263,7 +367,7 @@ func (x *SaveGameStorageReq) String() string {
 func (*SaveGameStorageReq) ProtoMessage() {}
 
 func (x *SaveGameStorageReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[4]
+	mi := &file_lottery_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -276,7 +380,7 @@ func (x *SaveGameStorageReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveGameStorageReq.ProtoReflect.Descriptor instead.
 func (*SaveGameStorageReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{4}
+	return file_lottery_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SaveGameStorageReq) GetUserId() uint32 {
@@ -330,7 +434,7 @@ type SaveGameStorageResp struct {
 
 func (x *SaveGameStorageResp) Reset() {
 	*x = SaveGameStorageResp{}
-	mi := &file_lottery_proto_msgTypes[5]
+	mi := &file_lottery_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -342,7 +446,7 @@ func (x *SaveGameStorageResp) String() string {
 func (*SaveGameStorageResp) ProtoMessage() {}
 
 func (x *SaveGameStorageResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[5]
+	mi := &file_lottery_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -355,7 +459,7 @@ func (x *SaveGameStorageResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveGameStorageResp.ProtoReflect.Descriptor instead.
 func (*SaveGameStorageResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{5}
+	return file_lottery_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SaveGameStorageResp) GetCode() ErrorCode {
@@ -377,7 +481,7 @@ type LoadGameStorageReq struct {
 
 func (x *LoadGameStorageReq) Reset() {
 	*x = LoadGameStorageReq{}
-	mi := &file_lottery_proto_msgTypes[6]
+	mi := &file_lottery_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +493,7 @@ func (x *LoadGameStorageReq) String() string {
 func (*LoadGameStorageReq) ProtoMessage() {}
 
 func (x *LoadGameStorageReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[6]
+	mi := &file_lottery_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +506,7 @@ func (x *LoadGameStorageReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadGameStorageReq.ProtoReflect.Descriptor instead.
 func (*LoadGameStorageReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{6}
+	return file_lottery_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LoadGameStorageReq) GetUserId() uint32 {
@@ -444,7 +548,7 @@ type LoadGameStorageResp struct {
 
 func (x *LoadGameStorageResp) Reset() {
 	*x = LoadGameStorageResp{}
-	mi := &file_lottery_proto_msgTypes[7]
+	mi := &file_lottery_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -456,7 +560,7 @@ func (x *LoadGameStorageResp) String() string {
 func (*LoadGameStorageResp) ProtoMessage() {}
 
 func (x *LoadGameStorageResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[7]
+	mi := &file_lottery_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -469,7 +573,7 @@ func (x *LoadGameStorageResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadGameStorageResp.ProtoReflect.Descriptor instead.
 func (*LoadGameStorageResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{7}
+	return file_lottery_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LoadGameStorageResp) GetCode() ErrorCode {
@@ -505,7 +609,7 @@ type DeleteGameStorageReq struct {
 
 func (x *DeleteGameStorageReq) Reset() {
 	*x = DeleteGameStorageReq{}
-	mi := &file_lottery_proto_msgTypes[8]
+	mi := &file_lottery_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -517,7 +621,7 @@ func (x *DeleteGameStorageReq) String() string {
 func (*DeleteGameStorageReq) ProtoMessage() {}
 
 func (x *DeleteGameStorageReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[8]
+	mi := &file_lottery_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -530,7 +634,7 @@ func (x *DeleteGameStorageReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGameStorageReq.ProtoReflect.Descriptor instead.
 func (*DeleteGameStorageReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{8}
+	return file_lottery_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeleteGameStorageReq) GetUserId() uint32 {
@@ -570,7 +674,7 @@ type DeleteGameStorageResp struct {
 
 func (x *DeleteGameStorageResp) Reset() {
 	*x = DeleteGameStorageResp{}
-	mi := &file_lottery_proto_msgTypes[9]
+	mi := &file_lottery_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -582,7 +686,7 @@ func (x *DeleteGameStorageResp) String() string {
 func (*DeleteGameStorageResp) ProtoMessage() {}
 
 func (x *DeleteGameStorageResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[9]
+	mi := &file_lottery_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -595,7 +699,7 @@ func (x *DeleteGameStorageResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGameStorageResp.ProtoReflect.Descriptor instead.
 func (*DeleteGameStorageResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{9}
+	return file_lottery_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DeleteGameStorageResp) GetCode() ErrorCode {
@@ -616,7 +720,7 @@ type GameStorageItem struct {
 
 func (x *GameStorageItem) Reset() {
 	*x = GameStorageItem{}
-	mi := &file_lottery_proto_msgTypes[10]
+	mi := &file_lottery_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -628,7 +732,7 @@ func (x *GameStorageItem) String() string {
 func (*GameStorageItem) ProtoMessage() {}
 
 func (x *GameStorageItem) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[10]
+	mi := &file_lottery_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -641,7 +745,7 @@ func (x *GameStorageItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameStorageItem.ProtoReflect.Descriptor instead.
 func (*GameStorageItem) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{10}
+	return file_lottery_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GameStorageItem) GetStorageKey() string {
@@ -675,7 +779,7 @@ type SlotDoBetFlowControl struct {
 
 func (x *SlotDoBetFlowControl) Reset() {
 	*x = SlotDoBetFlowControl{}
-	mi := &file_lottery_proto_msgTypes[11]
+	mi := &file_lottery_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -687,7 +791,7 @@ func (x *SlotDoBetFlowControl) String() string {
 func (*SlotDoBetFlowControl) ProtoMessage() {}
 
 func (x *SlotDoBetFlowControl) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[11]
+	mi := &file_lottery_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -700,7 +804,7 @@ func (x *SlotDoBetFlowControl) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlotDoBetFlowControl.ProtoReflect.Descriptor instead.
 func (*SlotDoBetFlowControl) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{11}
+	return file_lottery_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SlotDoBetFlowControl) GetRefundPoolAmount() string {
@@ -738,7 +842,7 @@ type SlotsDoBetReq struct {
 
 func (x *SlotsDoBetReq) Reset() {
 	*x = SlotsDoBetReq{}
-	mi := &file_lottery_proto_msgTypes[12]
+	mi := &file_lottery_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +854,7 @@ func (x *SlotsDoBetReq) String() string {
 func (*SlotsDoBetReq) ProtoMessage() {}
 
 func (x *SlotsDoBetReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[12]
+	mi := &file_lottery_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +867,7 @@ func (x *SlotsDoBetReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlotsDoBetReq.ProtoReflect.Descriptor instead.
 func (*SlotsDoBetReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{12}
+	return file_lottery_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SlotsDoBetReq) GetUserId() uint32 {
@@ -878,7 +982,7 @@ type SlotsDoBetFreeReq struct {
 
 func (x *SlotsDoBetFreeReq) Reset() {
 	*x = SlotsDoBetFreeReq{}
-	mi := &file_lottery_proto_msgTypes[13]
+	mi := &file_lottery_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -890,7 +994,7 @@ func (x *SlotsDoBetFreeReq) String() string {
 func (*SlotsDoBetFreeReq) ProtoMessage() {}
 
 func (x *SlotsDoBetFreeReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[13]
+	mi := &file_lottery_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -903,7 +1007,7 @@ func (x *SlotsDoBetFreeReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlotsDoBetFreeReq.ProtoReflect.Descriptor instead.
 func (*SlotsDoBetFreeReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{13}
+	return file_lottery_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SlotsDoBetFreeReq) GetUserId() uint32 {
@@ -1010,7 +1114,7 @@ type SlotsDoBetResp struct {
 
 func (x *SlotsDoBetResp) Reset() {
 	*x = SlotsDoBetResp{}
-	mi := &file_lottery_proto_msgTypes[14]
+	mi := &file_lottery_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1022,7 +1126,7 @@ func (x *SlotsDoBetResp) String() string {
 func (*SlotsDoBetResp) ProtoMessage() {}
 
 func (x *SlotsDoBetResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[14]
+	mi := &file_lottery_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1035,7 +1139,7 @@ func (x *SlotsDoBetResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlotsDoBetResp.ProtoReflect.Descriptor instead.
 func (*SlotsDoBetResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{14}
+	return file_lottery_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SlotsDoBetResp) GetCode() ErrorCode {
@@ -1073,6 +1177,206 @@ func (x *SlotsDoBetResp) GetError() string {
 	return ""
 }
 
+type Ug5GuessReq struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	UserId                uint32                 `protobuf:"varint,1,opt,name=userId,proto3" json:"userId,omitempty"`
+	AgentId               uint32                 `protobuf:"varint,2,opt,name=agentId,proto3" json:"agentId,omitempty"`
+	GameId                uint32                 `protobuf:"varint,3,opt,name=gameId,proto3" json:"gameId,omitempty"`
+	CurrencyType          string                 `protobuf:"bytes,4,opt,name=currencyType,proto3" json:"currencyType,omitempty"`
+	RoundId               string                 `protobuf:"bytes,5,opt,name=roundId,proto3" json:"roundId,omitempty"`     // 整条竞猜链标识，不依赖中途记录
+	BetAmount             string                 `protobuf:"bytes,6,opt,name=betAmount,proto3" json:"betAmount,omitempty"` // 本次扣款，元；按毛金额传输，不在 game server 扣税
+	WinAmount             string                 `protobuf:"bytes,7,opt,name=winAmount,proto3" json:"winAmount,omitempty"` // 本次派奖，元；按毛金额传输，不在 game server 扣税
+	Complete              bool                   `protobuf:"varint,8,opt,name=complete,proto3" json:"complete,omitempty"`
+	RecordJson            string                 `protobuf:"bytes,9,opt,name=recordJson,proto3" json:"recordJson,omitempty"` // 中途必须为空；结束必须是整链记录，统计取记录而非增量金额
+	GameStorage           []*GameStorageItem     `protobuf:"bytes,10,rep,name=gameStorage,proto3" json:"gameStorage,omitempty"`
+	DeleteGameStorageKeys []string               `protobuf:"bytes,11,rep,name=deleteGameStorageKeys,proto3" json:"deleteGameStorageKeys,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *Ug5GuessReq) Reset() {
+	*x = Ug5GuessReq{}
+	mi := &file_lottery_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Ug5GuessReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Ug5GuessReq) ProtoMessage() {}
+
+func (x *Ug5GuessReq) ProtoReflect() protoreflect.Message {
+	mi := &file_lottery_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Ug5GuessReq.ProtoReflect.Descriptor instead.
+func (*Ug5GuessReq) Descriptor() ([]byte, []int) {
+	return file_lottery_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *Ug5GuessReq) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *Ug5GuessReq) GetAgentId() uint32 {
+	if x != nil {
+		return x.AgentId
+	}
+	return 0
+}
+
+func (x *Ug5GuessReq) GetGameId() uint32 {
+	if x != nil {
+		return x.GameId
+	}
+	return 0
+}
+
+func (x *Ug5GuessReq) GetCurrencyType() string {
+	if x != nil {
+		return x.CurrencyType
+	}
+	return ""
+}
+
+func (x *Ug5GuessReq) GetRoundId() string {
+	if x != nil {
+		return x.RoundId
+	}
+	return ""
+}
+
+func (x *Ug5GuessReq) GetBetAmount() string {
+	if x != nil {
+		return x.BetAmount
+	}
+	return ""
+}
+
+func (x *Ug5GuessReq) GetWinAmount() string {
+	if x != nil {
+		return x.WinAmount
+	}
+	return ""
+}
+
+func (x *Ug5GuessReq) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *Ug5GuessReq) GetRecordJson() string {
+	if x != nil {
+		return x.RecordJson
+	}
+	return ""
+}
+
+func (x *Ug5GuessReq) GetGameStorage() []*GameStorageItem {
+	if x != nil {
+		return x.GameStorage
+	}
+	return nil
+}
+
+func (x *Ug5GuessReq) GetDeleteGameStorageKeys() []string {
+	if x != nil {
+		return x.DeleteGameStorageKeys
+	}
+	return nil
+}
+
+type Ug5GuessResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          ErrorCode              `protobuf:"varint,1,opt,name=code,proto3,enum=base.ErrorCode" json:"code,omitempty"`
+	Ret           bool                   `protobuf:"varint,2,opt,name=ret,proto3" json:"ret,omitempty"`
+	Currency      string                 `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
+	CurrencyCent  int64                  `protobuf:"varint,4,opt,name=currencyCent,proto3" json:"currencyCent,omitempty"`
+	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Ug5GuessResp) Reset() {
+	*x = Ug5GuessResp{}
+	mi := &file_lottery_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Ug5GuessResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Ug5GuessResp) ProtoMessage() {}
+
+func (x *Ug5GuessResp) ProtoReflect() protoreflect.Message {
+	mi := &file_lottery_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Ug5GuessResp.ProtoReflect.Descriptor instead.
+func (*Ug5GuessResp) Descriptor() ([]byte, []int) {
+	return file_lottery_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *Ug5GuessResp) GetCode() ErrorCode {
+	if x != nil {
+		return x.Code
+	}
+	return ErrorCode_OK
+}
+
+func (x *Ug5GuessResp) GetRet() bool {
+	if x != nil {
+		return x.Ret
+	}
+	return false
+}
+
+func (x *Ug5GuessResp) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *Ug5GuessResp) GetCurrencyCent() int64 {
+	if x != nil {
+		return x.CurrencyCent
+	}
+	return 0
+}
+
+func (x *Ug5GuessResp) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type FruitDoBetReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        uint32                 `protobuf:"varint,1,opt,name=userId,proto3" json:"userId,omitempty"`
@@ -1091,7 +1395,7 @@ type FruitDoBetReq struct {
 
 func (x *FruitDoBetReq) Reset() {
 	*x = FruitDoBetReq{}
-	mi := &file_lottery_proto_msgTypes[15]
+	mi := &file_lottery_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1103,7 +1407,7 @@ func (x *FruitDoBetReq) String() string {
 func (*FruitDoBetReq) ProtoMessage() {}
 
 func (x *FruitDoBetReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[15]
+	mi := &file_lottery_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1116,7 +1420,7 @@ func (x *FruitDoBetReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitDoBetReq.ProtoReflect.Descriptor instead.
 func (*FruitDoBetReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{15}
+	return file_lottery_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *FruitDoBetReq) GetUserId() uint32 {
@@ -1201,7 +1505,7 @@ type FruitDoBetResp struct {
 
 func (x *FruitDoBetResp) Reset() {
 	*x = FruitDoBetResp{}
-	mi := &file_lottery_proto_msgTypes[16]
+	mi := &file_lottery_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1213,7 +1517,7 @@ func (x *FruitDoBetResp) String() string {
 func (*FruitDoBetResp) ProtoMessage() {}
 
 func (x *FruitDoBetResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[16]
+	mi := &file_lottery_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1226,7 +1530,7 @@ func (x *FruitDoBetResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitDoBetResp.ProtoReflect.Descriptor instead.
 func (*FruitDoBetResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{16}
+	return file_lottery_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *FruitDoBetResp) GetCode() ErrorCode {
@@ -1272,7 +1576,7 @@ type FruitDoBetMultiReq struct {
 
 func (x *FruitDoBetMultiReq) Reset() {
 	*x = FruitDoBetMultiReq{}
-	mi := &file_lottery_proto_msgTypes[17]
+	mi := &file_lottery_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1284,7 +1588,7 @@ func (x *FruitDoBetMultiReq) String() string {
 func (*FruitDoBetMultiReq) ProtoMessage() {}
 
 func (x *FruitDoBetMultiReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[17]
+	mi := &file_lottery_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1297,7 +1601,7 @@ func (x *FruitDoBetMultiReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitDoBetMultiReq.ProtoReflect.Descriptor instead.
 func (*FruitDoBetMultiReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{17}
+	return file_lottery_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *FruitDoBetMultiReq) GetUserId() uint32 {
@@ -1361,7 +1665,7 @@ type FruitDoBetMultiResp struct {
 
 func (x *FruitDoBetMultiResp) Reset() {
 	*x = FruitDoBetMultiResp{}
-	mi := &file_lottery_proto_msgTypes[18]
+	mi := &file_lottery_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1373,7 +1677,7 @@ func (x *FruitDoBetMultiResp) String() string {
 func (*FruitDoBetMultiResp) ProtoMessage() {}
 
 func (x *FruitDoBetMultiResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[18]
+	mi := &file_lottery_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1386,7 +1690,7 @@ func (x *FruitDoBetMultiResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitDoBetMultiResp.ProtoReflect.Descriptor instead.
 func (*FruitDoBetMultiResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{18}
+	return file_lottery_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *FruitDoBetMultiResp) GetCode() ErrorCode {
@@ -1431,7 +1735,7 @@ type FruitRefundMultiReq struct {
 
 func (x *FruitRefundMultiReq) Reset() {
 	*x = FruitRefundMultiReq{}
-	mi := &file_lottery_proto_msgTypes[19]
+	mi := &file_lottery_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1443,7 +1747,7 @@ func (x *FruitRefundMultiReq) String() string {
 func (*FruitRefundMultiReq) ProtoMessage() {}
 
 func (x *FruitRefundMultiReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[19]
+	mi := &file_lottery_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1456,7 +1760,7 @@ func (x *FruitRefundMultiReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitRefundMultiReq.ProtoReflect.Descriptor instead.
 func (*FruitRefundMultiReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{19}
+	return file_lottery_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *FruitRefundMultiReq) GetUserId() uint32 {
@@ -1513,7 +1817,7 @@ type FruitRefundMultiResp struct {
 
 func (x *FruitRefundMultiResp) Reset() {
 	*x = FruitRefundMultiResp{}
-	mi := &file_lottery_proto_msgTypes[20]
+	mi := &file_lottery_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1525,7 +1829,7 @@ func (x *FruitRefundMultiResp) String() string {
 func (*FruitRefundMultiResp) ProtoMessage() {}
 
 func (x *FruitRefundMultiResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[20]
+	mi := &file_lottery_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1538,7 +1842,7 @@ func (x *FruitRefundMultiResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitRefundMultiResp.ProtoReflect.Descriptor instead.
 func (*FruitRefundMultiResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{20}
+	return file_lottery_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *FruitRefundMultiResp) GetCode() ErrorCode {
@@ -1584,7 +1888,7 @@ type FruitSettlePlayer struct {
 
 func (x *FruitSettlePlayer) Reset() {
 	*x = FruitSettlePlayer{}
-	mi := &file_lottery_proto_msgTypes[21]
+	mi := &file_lottery_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1596,7 +1900,7 @@ func (x *FruitSettlePlayer) String() string {
 func (*FruitSettlePlayer) ProtoMessage() {}
 
 func (x *FruitSettlePlayer) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[21]
+	mi := &file_lottery_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1609,7 +1913,7 @@ func (x *FruitSettlePlayer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitSettlePlayer.ProtoReflect.Descriptor instead.
 func (*FruitSettlePlayer) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{21}
+	return file_lottery_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *FruitSettlePlayer) GetUserId() uint32 {
@@ -1675,7 +1979,7 @@ type FruitSettleRoundReq struct {
 
 func (x *FruitSettleRoundReq) Reset() {
 	*x = FruitSettleRoundReq{}
-	mi := &file_lottery_proto_msgTypes[22]
+	mi := &file_lottery_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1687,7 +1991,7 @@ func (x *FruitSettleRoundReq) String() string {
 func (*FruitSettleRoundReq) ProtoMessage() {}
 
 func (x *FruitSettleRoundReq) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[22]
+	mi := &file_lottery_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1700,7 +2004,7 @@ func (x *FruitSettleRoundReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitSettleRoundReq.ProtoReflect.Descriptor instead.
 func (*FruitSettleRoundReq) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{22}
+	return file_lottery_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FruitSettleRoundReq) GetGameId() uint32 {
@@ -1756,7 +2060,7 @@ type FruitSettlePlayerResult struct {
 
 func (x *FruitSettlePlayerResult) Reset() {
 	*x = FruitSettlePlayerResult{}
-	mi := &file_lottery_proto_msgTypes[23]
+	mi := &file_lottery_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1768,7 +2072,7 @@ func (x *FruitSettlePlayerResult) String() string {
 func (*FruitSettlePlayerResult) ProtoMessage() {}
 
 func (x *FruitSettlePlayerResult) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[23]
+	mi := &file_lottery_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1781,7 +2085,7 @@ func (x *FruitSettlePlayerResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitSettlePlayerResult.ProtoReflect.Descriptor instead.
 func (*FruitSettlePlayerResult) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{23}
+	return file_lottery_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *FruitSettlePlayerResult) GetUserId() uint32 {
@@ -1816,7 +2120,7 @@ type FruitSettleRoundResp struct {
 
 func (x *FruitSettleRoundResp) Reset() {
 	*x = FruitSettleRoundResp{}
-	mi := &file_lottery_proto_msgTypes[24]
+	mi := &file_lottery_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1828,7 +2132,7 @@ func (x *FruitSettleRoundResp) String() string {
 func (*FruitSettleRoundResp) ProtoMessage() {}
 
 func (x *FruitSettleRoundResp) ProtoReflect() protoreflect.Message {
-	mi := &file_lottery_proto_msgTypes[24]
+	mi := &file_lottery_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1841,7 +2145,7 @@ func (x *FruitSettleRoundResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FruitSettleRoundResp.ProtoReflect.Descriptor instead.
 func (*FruitSettleRoundResp) Descriptor() ([]byte, []int) {
-	return file_lottery_proto_rawDescGZIP(), []int{24}
+	return file_lottery_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *FruitSettleRoundResp) GetCode() ErrorCode {
@@ -1870,7 +2174,13 @@ var File_lottery_proto protoreflect.FileDescriptor
 const file_lottery_proto_rawDesc = "" +
 	"\n" +
 	"\rlottery.proto\x12\alottery\x1a\n" +
-	"base.proto\"k\n" +
+	"base.proto\"U\n" +
+	"\x0eSetUserIconReq\x12\x16\n" +
+	"\x06userId\x18\x01 \x01(\rR\x06userId\x12\x12\n" +
+	"\x04Icon\x18\x02 \x01(\rR\x04Icon\x12\x17\n" +
+	"\agame_id\x18\x03 \x01(\rR\x06gameId\"7\n" +
+	"\x0fSetUserIconResp\x12$\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x10.base.error_codeR\x04code\"k\n" +
 	"\x13PoolAmountResultReq\x12\x18\n" +
 	"\aagentId\x18\x01 \x01(\rR\aagentId\x12\x16\n" +
 	"\x06gameId\x18\x02 \x01(\rR\x06gameId\x12\"\n" +
@@ -1967,6 +2277,27 @@ const file_lottery_proto_rawDesc = "" +
 	"\x03ret\x18\x02 \x01(\bR\x03ret\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12\"\n" +
 	"\fcurrencyCent\x18\x04 \x01(\x03R\fcurrencyCent\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\"\xff\x02\n" +
+	"\vUg5GuessReq\x12\x16\n" +
+	"\x06userId\x18\x01 \x01(\rR\x06userId\x12\x18\n" +
+	"\aagentId\x18\x02 \x01(\rR\aagentId\x12\x16\n" +
+	"\x06gameId\x18\x03 \x01(\rR\x06gameId\x12\"\n" +
+	"\fcurrencyType\x18\x04 \x01(\tR\fcurrencyType\x12\x18\n" +
+	"\aroundId\x18\x05 \x01(\tR\aroundId\x12\x1c\n" +
+	"\tbetAmount\x18\x06 \x01(\tR\tbetAmount\x12\x1c\n" +
+	"\twinAmount\x18\a \x01(\tR\twinAmount\x12\x1a\n" +
+	"\bcomplete\x18\b \x01(\bR\bcomplete\x12\x1e\n" +
+	"\n" +
+	"recordJson\x18\t \x01(\tR\n" +
+	"recordJson\x12:\n" +
+	"\vgameStorage\x18\n" +
+	" \x03(\v2\x18.lottery.GameStorageItemR\vgameStorage\x124\n" +
+	"\x15deleteGameStorageKeys\x18\v \x03(\tR\x15deleteGameStorageKeys\"\x9c\x01\n" +
+	"\fUg5GuessResp\x12$\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x10.base.error_codeR\x04code\x12\x10\n" +
+	"\x03ret\x18\x02 \x01(\bR\x03ret\x12\x1a\n" +
+	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12\"\n" +
+	"\fcurrencyCent\x18\x04 \x01(\x03R\fcurrencyCent\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\"\xaf\x02\n" +
 	"\rFruitDoBetReq\x12\x16\n" +
 	"\x06userId\x18\x01 \x01(\rR\x06userId\x12\x18\n" +
@@ -2037,7 +2368,7 @@ const file_lottery_proto_rawDesc = "" +
 	"\x14FruitSettleRoundResp\x12$\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x10.base.error_codeR\x04code\x12\x10\n" +
 	"\x03ret\x18\x02 \x01(\bR\x03ret\x12:\n" +
-	"\aplayers\x18\x03 \x03(\v2 .lottery.FruitSettlePlayerResultR\aplayers2\xc5\x06\n" +
+	"\aplayers\x18\x03 \x03(\v2 .lottery.FruitSettlePlayerResultR\aplayers2\xc0\a\n" +
 	"\x0eLotteryService\x12O\n" +
 	"\x10PoolAmountResult\x12\x1c.lottery.PoolAmountResultReq\x1a\x1d.lottery.PoolAmountResultResp\x12=\n" +
 	"\n" +
@@ -2047,12 +2378,14 @@ const file_lottery_proto_rawDesc = "" +
 	"\x11DeleteGameStorage\x12\x1d.lottery.DeleteGameStorageReq\x1a\x1e.lottery.DeleteGameStorageResp\x12=\n" +
 	"\n" +
 	"SlotsDoBet\x12\x16.lottery.SlotsDoBetReq\x1a\x17.lottery.SlotsDoBetResp\x12E\n" +
-	"\x0eSlotsDoBetFree\x12\x1a.lottery.SlotsDoBetFreeReq\x1a\x17.lottery.SlotsDoBetResp\x12=\n" +
+	"\x0eSlotsDoBetFree\x12\x1a.lottery.SlotsDoBetFreeReq\x1a\x17.lottery.SlotsDoBetResp\x127\n" +
+	"\bUg5Guess\x12\x14.lottery.Ug5GuessReq\x1a\x15.lottery.Ug5GuessResp\x12=\n" +
 	"\n" +
 	"FruitDoBet\x12\x16.lottery.FruitDoBetReq\x1a\x17.lottery.FruitDoBetResp\x12L\n" +
 	"\x0fFruitDoBetMulti\x12\x1b.lottery.FruitDoBetMultiReq\x1a\x1c.lottery.FruitDoBetMultiResp\x12O\n" +
 	"\x10FruitRefundMulti\x12\x1c.lottery.FruitRefundMultiReq\x1a\x1d.lottery.FruitRefundMultiResp\x12O\n" +
-	"\x10FruitSettleRound\x12\x1c.lottery.FruitSettleRoundReq\x1a\x1d.lottery.FruitSettleRoundRespB\x15Z\x13./services;servicesb\x06proto3"
+	"\x10FruitSettleRound\x12\x1c.lottery.FruitSettleRoundReq\x1a\x1d.lottery.FruitSettleRoundResp\x12@\n" +
+	"\vSetUserIcon\x12\x17.lottery.SetUserIconReq\x1a\x18.lottery.SetUserIconRespB\x15Z\x13./services;servicesb\x06proto3"
 
 var (
 	file_lottery_proto_rawDescOnce sync.Once
@@ -2066,79 +2399,90 @@ func file_lottery_proto_rawDescGZIP() []byte {
 	return file_lottery_proto_rawDescData
 }
 
-var file_lottery_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_lottery_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_lottery_proto_goTypes = []any{
-	(*PoolAmountResultReq)(nil),     // 0: lottery.PoolAmountResultReq
-	(*PoolAmountResultResp)(nil),    // 1: lottery.PoolAmountResultResp
-	(*GetBalanceReq)(nil),           // 2: lottery.GetBalanceReq
-	(*GetBalanceResp)(nil),          // 3: lottery.GetBalanceResp
-	(*SaveGameStorageReq)(nil),      // 4: lottery.SaveGameStorageReq
-	(*SaveGameStorageResp)(nil),     // 5: lottery.SaveGameStorageResp
-	(*LoadGameStorageReq)(nil),      // 6: lottery.LoadGameStorageReq
-	(*LoadGameStorageResp)(nil),     // 7: lottery.LoadGameStorageResp
-	(*DeleteGameStorageReq)(nil),    // 8: lottery.DeleteGameStorageReq
-	(*DeleteGameStorageResp)(nil),   // 9: lottery.DeleteGameStorageResp
-	(*GameStorageItem)(nil),         // 10: lottery.GameStorageItem
-	(*SlotDoBetFlowControl)(nil),    // 11: lottery.SlotDoBetFlowControl
-	(*SlotsDoBetReq)(nil),           // 12: lottery.SlotsDoBetReq
-	(*SlotsDoBetFreeReq)(nil),       // 13: lottery.SlotsDoBetFreeReq
-	(*SlotsDoBetResp)(nil),          // 14: lottery.SlotsDoBetResp
-	(*FruitDoBetReq)(nil),           // 15: lottery.FruitDoBetReq
-	(*FruitDoBetResp)(nil),          // 16: lottery.FruitDoBetResp
-	(*FruitDoBetMultiReq)(nil),      // 17: lottery.FruitDoBetMultiReq
-	(*FruitDoBetMultiResp)(nil),     // 18: lottery.FruitDoBetMultiResp
-	(*FruitRefundMultiReq)(nil),     // 19: lottery.FruitRefundMultiReq
-	(*FruitRefundMultiResp)(nil),    // 20: lottery.FruitRefundMultiResp
-	(*FruitSettlePlayer)(nil),       // 21: lottery.FruitSettlePlayer
-	(*FruitSettleRoundReq)(nil),     // 22: lottery.FruitSettleRoundReq
-	(*FruitSettlePlayerResult)(nil), // 23: lottery.FruitSettlePlayerResult
-	(*FruitSettleRoundResp)(nil),    // 24: lottery.FruitSettleRoundResp
-	(ErrorCode)(0),                  // 25: base.error_code
+	(*SetUserIconReq)(nil),          // 0: lottery.SetUserIconReq
+	(*SetUserIconResp)(nil),         // 1: lottery.SetUserIconResp
+	(*PoolAmountResultReq)(nil),     // 2: lottery.PoolAmountResultReq
+	(*PoolAmountResultResp)(nil),    // 3: lottery.PoolAmountResultResp
+	(*GetBalanceReq)(nil),           // 4: lottery.GetBalanceReq
+	(*GetBalanceResp)(nil),          // 5: lottery.GetBalanceResp
+	(*SaveGameStorageReq)(nil),      // 6: lottery.SaveGameStorageReq
+	(*SaveGameStorageResp)(nil),     // 7: lottery.SaveGameStorageResp
+	(*LoadGameStorageReq)(nil),      // 8: lottery.LoadGameStorageReq
+	(*LoadGameStorageResp)(nil),     // 9: lottery.LoadGameStorageResp
+	(*DeleteGameStorageReq)(nil),    // 10: lottery.DeleteGameStorageReq
+	(*DeleteGameStorageResp)(nil),   // 11: lottery.DeleteGameStorageResp
+	(*GameStorageItem)(nil),         // 12: lottery.GameStorageItem
+	(*SlotDoBetFlowControl)(nil),    // 13: lottery.SlotDoBetFlowControl
+	(*SlotsDoBetReq)(nil),           // 14: lottery.SlotsDoBetReq
+	(*SlotsDoBetFreeReq)(nil),       // 15: lottery.SlotsDoBetFreeReq
+	(*SlotsDoBetResp)(nil),          // 16: lottery.SlotsDoBetResp
+	(*Ug5GuessReq)(nil),             // 17: lottery.Ug5GuessReq
+	(*Ug5GuessResp)(nil),            // 18: lottery.Ug5GuessResp
+	(*FruitDoBetReq)(nil),           // 19: lottery.FruitDoBetReq
+	(*FruitDoBetResp)(nil),          // 20: lottery.FruitDoBetResp
+	(*FruitDoBetMultiReq)(nil),      // 21: lottery.FruitDoBetMultiReq
+	(*FruitDoBetMultiResp)(nil),     // 22: lottery.FruitDoBetMultiResp
+	(*FruitRefundMultiReq)(nil),     // 23: lottery.FruitRefundMultiReq
+	(*FruitRefundMultiResp)(nil),    // 24: lottery.FruitRefundMultiResp
+	(*FruitSettlePlayer)(nil),       // 25: lottery.FruitSettlePlayer
+	(*FruitSettleRoundReq)(nil),     // 26: lottery.FruitSettleRoundReq
+	(*FruitSettlePlayerResult)(nil), // 27: lottery.FruitSettlePlayerResult
+	(*FruitSettleRoundResp)(nil),    // 28: lottery.FruitSettleRoundResp
+	(ErrorCode)(0),                  // 29: base.error_code
 }
 var file_lottery_proto_depIdxs = []int32{
-	25, // 0: lottery.PoolAmountResultResp.code:type_name -> base.error_code
-	25, // 1: lottery.GetBalanceResp.code:type_name -> base.error_code
-	25, // 2: lottery.SaveGameStorageResp.code:type_name -> base.error_code
-	25, // 3: lottery.LoadGameStorageResp.code:type_name -> base.error_code
-	25, // 4: lottery.DeleteGameStorageResp.code:type_name -> base.error_code
-	10, // 5: lottery.SlotsDoBetReq.gameStorage:type_name -> lottery.GameStorageItem
-	11, // 6: lottery.SlotsDoBetReq.flowControl:type_name -> lottery.SlotDoBetFlowControl
-	10, // 7: lottery.SlotsDoBetFreeReq.gameStorage:type_name -> lottery.GameStorageItem
-	11, // 8: lottery.SlotsDoBetFreeReq.flowControl:type_name -> lottery.SlotDoBetFlowControl
-	25, // 9: lottery.SlotsDoBetResp.code:type_name -> base.error_code
-	25, // 10: lottery.FruitDoBetResp.code:type_name -> base.error_code
-	25, // 11: lottery.FruitDoBetMultiResp.code:type_name -> base.error_code
-	25, // 12: lottery.FruitRefundMultiResp.code:type_name -> base.error_code
-	21, // 13: lottery.FruitSettleRoundReq.players:type_name -> lottery.FruitSettlePlayer
-	25, // 14: lottery.FruitSettleRoundResp.code:type_name -> base.error_code
-	23, // 15: lottery.FruitSettleRoundResp.players:type_name -> lottery.FruitSettlePlayerResult
-	0,  // 16: lottery.LotteryService.PoolAmountResult:input_type -> lottery.PoolAmountResultReq
-	2,  // 17: lottery.LotteryService.GetBalance:input_type -> lottery.GetBalanceReq
-	4,  // 18: lottery.LotteryService.SaveGameStorage:input_type -> lottery.SaveGameStorageReq
-	6,  // 19: lottery.LotteryService.LoadGameStorage:input_type -> lottery.LoadGameStorageReq
-	8,  // 20: lottery.LotteryService.DeleteGameStorage:input_type -> lottery.DeleteGameStorageReq
-	12, // 21: lottery.LotteryService.SlotsDoBet:input_type -> lottery.SlotsDoBetReq
-	13, // 22: lottery.LotteryService.SlotsDoBetFree:input_type -> lottery.SlotsDoBetFreeReq
-	15, // 23: lottery.LotteryService.FruitDoBet:input_type -> lottery.FruitDoBetReq
-	17, // 24: lottery.LotteryService.FruitDoBetMulti:input_type -> lottery.FruitDoBetMultiReq
-	19, // 25: lottery.LotteryService.FruitRefundMulti:input_type -> lottery.FruitRefundMultiReq
-	22, // 26: lottery.LotteryService.FruitSettleRound:input_type -> lottery.FruitSettleRoundReq
-	1,  // 27: lottery.LotteryService.PoolAmountResult:output_type -> lottery.PoolAmountResultResp
-	3,  // 28: lottery.LotteryService.GetBalance:output_type -> lottery.GetBalanceResp
-	5,  // 29: lottery.LotteryService.SaveGameStorage:output_type -> lottery.SaveGameStorageResp
-	7,  // 30: lottery.LotteryService.LoadGameStorage:output_type -> lottery.LoadGameStorageResp
-	9,  // 31: lottery.LotteryService.DeleteGameStorage:output_type -> lottery.DeleteGameStorageResp
-	14, // 32: lottery.LotteryService.SlotsDoBet:output_type -> lottery.SlotsDoBetResp
-	14, // 33: lottery.LotteryService.SlotsDoBetFree:output_type -> lottery.SlotsDoBetResp
-	16, // 34: lottery.LotteryService.FruitDoBet:output_type -> lottery.FruitDoBetResp
-	18, // 35: lottery.LotteryService.FruitDoBetMulti:output_type -> lottery.FruitDoBetMultiResp
-	20, // 36: lottery.LotteryService.FruitRefundMulti:output_type -> lottery.FruitRefundMultiResp
-	24, // 37: lottery.LotteryService.FruitSettleRound:output_type -> lottery.FruitSettleRoundResp
-	27, // [27:38] is the sub-list for method output_type
-	16, // [16:27] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	29, // 0: lottery.SetUserIconResp.code:type_name -> base.error_code
+	29, // 1: lottery.PoolAmountResultResp.code:type_name -> base.error_code
+	29, // 2: lottery.GetBalanceResp.code:type_name -> base.error_code
+	29, // 3: lottery.SaveGameStorageResp.code:type_name -> base.error_code
+	29, // 4: lottery.LoadGameStorageResp.code:type_name -> base.error_code
+	29, // 5: lottery.DeleteGameStorageResp.code:type_name -> base.error_code
+	12, // 6: lottery.SlotsDoBetReq.gameStorage:type_name -> lottery.GameStorageItem
+	13, // 7: lottery.SlotsDoBetReq.flowControl:type_name -> lottery.SlotDoBetFlowControl
+	12, // 8: lottery.SlotsDoBetFreeReq.gameStorage:type_name -> lottery.GameStorageItem
+	13, // 9: lottery.SlotsDoBetFreeReq.flowControl:type_name -> lottery.SlotDoBetFlowControl
+	29, // 10: lottery.SlotsDoBetResp.code:type_name -> base.error_code
+	12, // 11: lottery.Ug5GuessReq.gameStorage:type_name -> lottery.GameStorageItem
+	29, // 12: lottery.Ug5GuessResp.code:type_name -> base.error_code
+	29, // 13: lottery.FruitDoBetResp.code:type_name -> base.error_code
+	29, // 14: lottery.FruitDoBetMultiResp.code:type_name -> base.error_code
+	29, // 15: lottery.FruitRefundMultiResp.code:type_name -> base.error_code
+	25, // 16: lottery.FruitSettleRoundReq.players:type_name -> lottery.FruitSettlePlayer
+	29, // 17: lottery.FruitSettleRoundResp.code:type_name -> base.error_code
+	27, // 18: lottery.FruitSettleRoundResp.players:type_name -> lottery.FruitSettlePlayerResult
+	2,  // 19: lottery.LotteryService.PoolAmountResult:input_type -> lottery.PoolAmountResultReq
+	4,  // 20: lottery.LotteryService.GetBalance:input_type -> lottery.GetBalanceReq
+	6,  // 21: lottery.LotteryService.SaveGameStorage:input_type -> lottery.SaveGameStorageReq
+	8,  // 22: lottery.LotteryService.LoadGameStorage:input_type -> lottery.LoadGameStorageReq
+	10, // 23: lottery.LotteryService.DeleteGameStorage:input_type -> lottery.DeleteGameStorageReq
+	14, // 24: lottery.LotteryService.SlotsDoBet:input_type -> lottery.SlotsDoBetReq
+	15, // 25: lottery.LotteryService.SlotsDoBetFree:input_type -> lottery.SlotsDoBetFreeReq
+	17, // 26: lottery.LotteryService.Ug5Guess:input_type -> lottery.Ug5GuessReq
+	19, // 27: lottery.LotteryService.FruitDoBet:input_type -> lottery.FruitDoBetReq
+	21, // 28: lottery.LotteryService.FruitDoBetMulti:input_type -> lottery.FruitDoBetMultiReq
+	23, // 29: lottery.LotteryService.FruitRefundMulti:input_type -> lottery.FruitRefundMultiReq
+	26, // 30: lottery.LotteryService.FruitSettleRound:input_type -> lottery.FruitSettleRoundReq
+	0,  // 31: lottery.LotteryService.SetUserIcon:input_type -> lottery.SetUserIconReq
+	3,  // 32: lottery.LotteryService.PoolAmountResult:output_type -> lottery.PoolAmountResultResp
+	5,  // 33: lottery.LotteryService.GetBalance:output_type -> lottery.GetBalanceResp
+	7,  // 34: lottery.LotteryService.SaveGameStorage:output_type -> lottery.SaveGameStorageResp
+	9,  // 35: lottery.LotteryService.LoadGameStorage:output_type -> lottery.LoadGameStorageResp
+	11, // 36: lottery.LotteryService.DeleteGameStorage:output_type -> lottery.DeleteGameStorageResp
+	16, // 37: lottery.LotteryService.SlotsDoBet:output_type -> lottery.SlotsDoBetResp
+	16, // 38: lottery.LotteryService.SlotsDoBetFree:output_type -> lottery.SlotsDoBetResp
+	18, // 39: lottery.LotteryService.Ug5Guess:output_type -> lottery.Ug5GuessResp
+	20, // 40: lottery.LotteryService.FruitDoBet:output_type -> lottery.FruitDoBetResp
+	22, // 41: lottery.LotteryService.FruitDoBetMulti:output_type -> lottery.FruitDoBetMultiResp
+	24, // 42: lottery.LotteryService.FruitRefundMulti:output_type -> lottery.FruitRefundMultiResp
+	28, // 43: lottery.LotteryService.FruitSettleRound:output_type -> lottery.FruitSettleRoundResp
+	1,  // 44: lottery.LotteryService.SetUserIcon:output_type -> lottery.SetUserIconResp
+	32, // [32:45] is the sub-list for method output_type
+	19, // [19:32] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_lottery_proto_init() }
@@ -2153,7 +2497,7 @@ func file_lottery_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_lottery_proto_rawDesc), len(file_lottery_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

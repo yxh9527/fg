@@ -91,9 +91,10 @@ SET sex         = ?,
     login_time  = ?,
     login_ip    = ?,
     money_limit = ?,
-	all_times   = ?
+	all_times   = ?,
+	ex_data     = ?
 WHERE user_id = ?
-`, p.Gender, p.Avatar, p.LoginTimeStamp, p.LoginIP, p.CurrencyLimit, p.AllTimes, p.Id)
+`, p.Gender, p.Avatar, p.LoginTimeStamp, p.LoginIP, p.CurrencyLimit, p.AllTimes, p.ExData, p.Id)
 
 			if res.Error != nil {
 				zap.L().Error("数据落地：写入数据库出错", zap.Stringer("data", p), zap.Error(err))

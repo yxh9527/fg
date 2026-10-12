@@ -184,6 +184,8 @@ func (rd *RedisDao) GetPlayer(playerId, factory uint32) (*services.HumanPlayer, 
 		case "isTourist":
 			isTourist, _ := strconv.Atoi(value)
 			p.IsTourist = int32(isTourist)
+		case "ex_data":
+			p.ExData = value
 		}
 	}
 	return &p, nil
@@ -208,10 +210,27 @@ func (rd *RedisDao) SetPlayer(p *services.HumanPlayer) error {
 		"currency_type":  p.CurrencyType,
 		"all_times":      p.AllTimes,
 		"isTourist":      p.IsTourist,
+		"ex_data":        p.ExData,
 	})
 	pipe.Expire(context.Background(), pID, time.Minute*20)
 	pipe.SAdd(context.Background(), "dirty_list", p.Id)
 	_, err := pipe.Exec(context.Background())
+	return err
+}
+
+func (rd *RedisDao) UpdatePlayerExData(playerId uint32, exData string) error {
+	pID := "player_" + strconv.FormatUint(uint64(playerId), 10)
+	exist, err := rd.cli.HExists(context.Background(), pID, "id").Result()
+	if err == redis.Nil || (err == nil && !exist) {
+		return redis.Nil
+	} else if err != nil {
+		return err
+	}
+	pipe := rd.cli.Pipeline()
+	pipe.HSet(context.Background(), pID, "ex_data", exData)
+	pipe.Expire(context.Background(), pID, time.Minute*20)
+	pipe.SAdd(context.Background(), "dirty_list", playerId)
+	_, err = pipe.Exec(context.Background())
 	return err
 }
 

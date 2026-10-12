@@ -21,10 +21,23 @@ service LotteryService {
     // 新服正式环境门面
     rpc SlotsDoBet(SlotsDoBetReq) returns (SlotsDoBetResp);
     rpc SlotsDoBetFree(SlotsDoBetFreeReq) returns (SlotsDoBetResp);
+    // UG5 竞猜：每次增量结算，complete 时才写整链注单
+    rpc Ug5Guess(Ug5GuessReq) returns (Ug5GuessResp);
     rpc FruitDoBet(FruitDoBetReq) returns (FruitDoBetResp);
     rpc FruitDoBetMulti(FruitDoBetMultiReq) returns (FruitDoBetMultiResp);
     rpc FruitRefundMulti(FruitRefundMultiReq) returns (FruitRefundMultiResp);
     rpc FruitSettleRound(FruitSettleRoundReq) returns (FruitSettleRoundResp);
+    rpc SetUserIcon(SetUserIconReq) returns (SetUserIconResp);
+}
+
+message SetUserIconReq {
+    uint32 userId = 1;
+    uint32 Icon = 2;
+    uint32 game_id = 3;
+}
+
+message SetUserIconResp {
+    base.error_code code = 1;
 }
 
 message PoolAmountResultReq {
@@ -129,6 +142,28 @@ message SlotsDoBetFreeReq {
 }
 
 message SlotsDoBetResp {
+    base.error_code code = 1;
+    bool ret = 2;
+    string currency = 3;
+    int64 currencyCent = 4;
+    string error = 5;
+}
+
+message Ug5GuessReq {
+    uint32 userId = 1;
+    uint32 agentId = 2;
+    uint32 gameId = 3;
+    string currencyType = 4;
+    string roundId = 5; // 整条竞猜链标识，不依赖中途记录
+    string betAmount = 6; // 本次扣款，元；按毛金额传输，不在 game server 扣税
+    string winAmount = 7; // 本次派奖，元；按毛金额传输，不在 game server 扣税
+    bool complete = 8;
+    string recordJson = 9; // 中途必须为空；结束必须是整链记录，统计取记录而非增量金额
+    repeated GameStorageItem gameStorage = 10;
+    repeated string deleteGameStorageKeys = 11;
+}
+
+message Ug5GuessResp {
     base.error_code code = 1;
     bool ret = 2;
     string currency = 3;

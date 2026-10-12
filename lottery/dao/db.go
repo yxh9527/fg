@@ -33,6 +33,11 @@ func InitDB(sysConfig *config.RunConfig) error {
 		return me
 	}
 	playerDB, managerDB = p, m
+	if !p.Migrator().HasColumn(&player.Player{}, "ex_data") {
+		if err := p.Migrator().AddColumn(&player.Player{}, "ExData"); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

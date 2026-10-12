@@ -139,6 +139,8 @@ func (rd *RedisDao) GetPlayer(playerId, factory uint32) (*services.HumanPlayer, 
 		case "all_times":
 			allTimes, _ := strconv.Atoi(value)
 			p.AllTimes = int32(allTimes)
+		case "ex_data":
+			p.ExData = value
 		}
 	}
 	return &p, nil
@@ -161,6 +163,7 @@ func (rd *RedisDao) SetPlayer(p *services.HumanPlayer) error {
 		"account":        p.Account,
 		"currency_type":  p.CurrencyType,
 		"all_times":      p.AllTimes,
+		"ex_data":        p.ExData,
 	}).Err()
 	if err == nil {
 		rd.Client.Expire(context.Background(), pID, time.Minute*20)

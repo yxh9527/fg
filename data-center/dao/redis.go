@@ -1,9 +1,9 @@
 package dao
 
 import (
-	"app/esindex"
 	"app/config"
 	"app/entity"
+	"app/esindex"
 	"context"
 	"data-center/event"
 	"data-center/util"
@@ -151,6 +151,8 @@ func (rd *RedisDao) GetPlayerOrigin(playerId uint32) (*services.HumanPlayer, str
 		case "isTourist":
 			isTourist, _ := strconv.Atoi(value)
 			p.IsTourist = int32(isTourist)
+		case "ex_data":
+			p.ExData = value
 		}
 	}
 
@@ -227,6 +229,8 @@ func (rd *RedisDao) GetPlayer(playerId, factory uint32) (*services.HumanPlayer, 
 		case "isTourist":
 			isTourist, _ := strconv.Atoi(value)
 			p.IsTourist = int32(isTourist)
+		case "ex_data":
+			p.ExData = value
 		}
 	}
 	return &p, nil
@@ -373,6 +377,7 @@ func (rd *RedisDao) SetPlayer(p *services.HumanPlayer, refreshDB bool) error {
 		"currency_type":  p.CurrencyType,
 		"all_times":      p.AllTimes,
 		"isTourist":      p.IsTourist,
+		"ex_data":        p.ExData,
 	}).Err()
 	if err == nil {
 		rd.Client.Expire(context.Background(), pID, time.Minute*20)

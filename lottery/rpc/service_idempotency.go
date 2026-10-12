@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/redis/go-redis/v9"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"micro_service/services"
@@ -186,6 +186,14 @@ func restoreFruitRefundMultiResp(payload string) (*services.FruitRefundMultiResp
 
 func restoreFruitSettleRoundResp(payload string) (*services.FruitSettleRoundResp, services.ErrorCode) {
 	resp := &services.FruitSettleRoundResp{}
+	if err := jsoniter.UnmarshalFromString(payload, resp); err != nil {
+		return nil, services.ErrorCode_SYSTEM_ERROR
+	}
+	return resp, services.ErrorCode_OK
+}
+
+func restoreUg5GuessResp(payload string) (*services.Ug5GuessResp, services.ErrorCode) {
+	resp := &services.Ug5GuessResp{}
 	if err := jsoniter.UnmarshalFromString(payload, resp); err != nil {
 		return nil, services.ErrorCode_SYSTEM_ERROR
 	}
