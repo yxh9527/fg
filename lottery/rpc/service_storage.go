@@ -80,6 +80,20 @@ func (d *LotteryService) LoadGameStorage(_ context.Context, req *services.LoadGa
 // DeleteGameStorage 幂等删除长期状态。
 func (d *LotteryService) DeleteGameStorage(_ context.Context, req *services.DeleteGameStorageReq) (resp *services.DeleteGameStorageResp, err error) {
 	resp = &services.DeleteGameStorageResp{Code: services.ErrorCode_OK}
+	var userID, gameID uint32
+	var currencySymbol, storageKey string
+	if req != nil {
+		userID = req.UserId
+		gameID = req.GameId
+		currencySymbol = req.CurrencySymbol
+		storageKey = req.StorageKey
+	}
+	zap.L().Info("DeleteGameStorage request",
+		zap.Uint32("userId", userID),
+		zap.Uint32("gameId", gameID),
+		zap.String("currencySymbol", currencySymbol),
+		zap.String("storageKey", storageKey),
+	)
 	if req == nil ||
 		req.UserId == 0 ||
 		req.GameId == 0 ||
