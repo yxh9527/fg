@@ -14,7 +14,6 @@ type slotsLotteryReq struct {
 	State         string
 	RoundID       string
 	MaxProfitLoss string
-	Complete      bool
 	Account       string
 	AverageBet    float64 // 购买免费触发局才带值；>0 时用其计算可赔付上限
 }
@@ -32,7 +31,6 @@ type singleBetReq struct {
 	Win          string
 	RoundID      string
 	Result       string
-	Complete     bool
 	Bet          string
 	AgentId      uint32
 	CurrencyType string

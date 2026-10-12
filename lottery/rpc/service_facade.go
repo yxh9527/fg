@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"app/config"
@@ -220,7 +221,7 @@ func slotErrorName(code services.ErrorCode) string {
 
 // SlotsDoBet 新服普通局门面。
 // 规则 A：内部走原 SlotsLottery（下注 + Complete 结算/ES 注单），再提交 GameStorage；
-// preWinAmount 映射为 MaxProfitLoss；flowControl.refundPoolAmount 在结算成功后按原 ReturnPool 退回。
+// preWinAmount 与本局 winAmount 一起预占水池；未使用部分只通过 flowControl.refundPoolAmount 退回。
 func (d *LotteryService) SlotsDoBet(ctx context.Context, req *services.SlotsDoBetReq) (resp *services.SlotsDoBetResp, err error) {
 	resp = &services.SlotsDoBetResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -278,7 +279,6 @@ func (d *LotteryService) SlotsDoBet(ctx context.Context, req *services.SlotsDoBe
 		State:         req.RecordJson,
 		RoundID:       req.RoundId,
 		MaxProfitLoss: preWin.String(),
-		Complete:      true,
 		Account:       req.Account,
 		AverageBet:    req.AverageBet,
 	})
@@ -337,10 +337,8 @@ func (d *LotteryService) SlotsDoBet(ctx context.Context, req *services.SlotsDoBe
 }
 
 // SlotsDoBetFree 免费/奖励局门面。
-// 不扣本金、不预扣水池、不走 MaxProfitLoss 对账。
-// Complete=true 只入账 + 写注单 + CacheIns().Complete 统计；
-// Complete=false 但有赢分/注单时只入账+写 ES，不跑 Complete 统计；
-// 未使用预占只能通过 flowControl.refundPoolAmount 退回。
+// 不扣本金、不预扣水池、不走 MaxProfitLoss 对账。每次调用都完局（入账 + 注单 + Complete 统计）。
+// 无赢分且无注单时只处理 storage/退池。未使用预占通过 flowControl.refundPoolAmount 退回。
 func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.SlotsDoBetFreeReq) (resp *services.SlotsDoBetResp, err error) {
 	resp = &services.SlotsDoBetResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -370,45 +368,34 @@ func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.Slots
 		return failSlotsDoBet(resp, services.ErrorCode_PARAMS_INVALID, "recordless winAmount must be zero")
 	}
 
-	// 免费中间步可能同 roundId 多次调用，仅 Complete=true 启用幂等。
-	idemKey := ""
-	idemSig := ""
-	if req.Complete {
-		idemKey = buildIdempotencyKey("slotsDoBetFree", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId)
-		idemSig = idempotencySignature(win.String(), totalBet.String(), req.RecordJson, req.Account, "complete")
-		if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
-			msg := ""
-			if code == services.ErrorCode_PARAMS_INVALID {
-				msg = "idempotencyConflict"
-			}
-			return failSlotsDoBet(resp, code, msg)
-		} else if hit {
-			if cached, rCode := restoreSlotsDoBetResp(payload); rCode != services.ErrorCode_OK {
-				return failSlotsDoBet(resp, rCode, "")
-			} else {
-				return cached, nil
-			}
+	idemKey := buildIdempotencyKey("slotsDoBetFree", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId)
+	idemSig := idempotencySignature(win.String(), totalBet.String(), req.RecordJson, req.Account)
+	if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
+		msg := ""
+		if code == services.ErrorCode_PARAMS_INVALID {
+			msg = "idempotencyConflict"
+		}
+		return failSlotsDoBet(resp, code, msg)
+	} else if hit {
+		if cached, rCode := restoreSlotsDoBetResp(payload); rCode != services.ErrorCode_OK {
+			return failSlotsDoBet(resp, rCode, "")
+		} else {
+			return cached, nil
 		}
 	}
 
 	currency := ""
-	// Complete 只由 req.Complete 控制，不能用 hasRecord/win 代替。
-	if req.Complete {
-		nc, code := d.slotsFreeAward(req, win, totalBet, true)
+	if win.GreaterThan(decimal.Zero) || hasRecord {
+		nc, code := d.slotsFreeAward(req, win, totalBet)
 		if code != services.ErrorCode_OK {
 			d.abortIdempotency(idemKey)
-			return failSlotsDoBet(resp, code, "")
-		}
-		currency = nc.Truncate(2).StringFixed(2)
-	} else if win.GreaterThan(decimal.Zero) || hasRecord {
-		nc, code := d.slotsFreeAward(req, win, totalBet, false)
-		if code != services.ErrorCode_OK {
 			return failSlotsDoBet(resp, code, "")
 		}
 		currency = nc.Truncate(2).StringFixed(2)
 	} else {
 		cent, code := d.getPlayerCurrency(req.UserId)
 		if code != services.ErrorCode_OK {
+			d.abortIdempotency(idemKey)
 			return failSlotsDoBet(resp, code, "")
 		}
 		currency = currencyFromCent(cent).Truncate(2).StringFixed(2)
@@ -417,42 +404,36 @@ func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.Slots
 	var deleteKeys []string
 	if req.FlowControl != nil {
 		deleteKeys = req.FlowControl.DeleteGameStorageKeys
-		if code := d.refundFacadePool(req.AgentId, req.UserId, req.GameId, req.CurrencyType, req.FlowControl.RefundPoolAmount); code != services.ErrorCode_OK {
-			if idemKey != "" {
-				d.abortIdempotency(idemKey)
-			}
-			return failSlotsDoBet(resp, code, "")
-		}
 	}
 	if code := d.applyGameStorageWrites(req.UserId, req.GameId, req.CurrencyType, req.GameStorage, deleteKeys); code != services.ErrorCode_OK {
-		if idemKey != "" {
-			d.abortIdempotency(idemKey)
-		}
+		d.abortIdempotency(idemKey)
 		return failSlotsDoBet(resp, code, "")
+	}
+	if req.FlowControl != nil {
+		if code := d.refundFacadePool(req.AgentId, req.UserId, req.GameId, req.CurrencyType, req.FlowControl.RefundPoolAmount); code != services.ErrorCode_OK {
+			d.abortIdempotency(idemKey)
+			return failSlotsDoBet(resp, code, "")
+		}
 	}
 
 	resp.Ret = true
 	resp.Currency, resp.CurrencyCent = fillBalanceResp(currency)
-	if idemKey != "" {
-		if raw, mErr := jsoniter.MarshalToString(resp); mErr == nil {
-			d.commitIdempotency(idemKey, idemSig, raw)
-		} else {
-			d.abortIdempotency(idemKey)
-		}
+	if raw, mErr := jsoniter.MarshalToString(resp); mErr == nil {
+		d.commitIdempotency(idemKey, idemSig, raw)
+	} else {
+		d.abortIdempotency(idemKey)
 	}
 	zap.L().Debug("SlotsDoBetFree success",
 		zap.Uint32("userId", req.UserId),
 		zap.Uint32("agentId", req.AgentId),
 		zap.Uint32("gameId", req.GameId),
 		zap.String("roundId", req.RoundId),
-		zap.Bool("complete", req.Complete),
 		zap.String("currency", resp.Currency))
 	return resp, nil
 }
 
-// slotsFreeAward 免费局入账。不扣本金、不预扣、不对账 RoundCache。
-// complete=true 时补 CacheIns().Complete 统计；水池预占只走 flowControl.refundPoolAmount。
-func (d *LotteryService) slotsFreeAward(req *services.SlotsDoBetFreeReq, win, totalBet decimal.Decimal, complete bool) (decimal.Decimal, services.ErrorCode) {
+// slotsFreeAward 免费局入账并完局统计。不扣本金、不预扣、不对账 RoundCache。
+func (d *LotteryService) slotsFreeAward(req *services.SlotsDoBetFreeReq, win, totalBet decimal.Decimal) (decimal.Decimal, services.ErrorCode) {
 	eAgent := dao.AgentManagerIns().Get(int64(req.AgentId))
 	if eAgent == nil {
 		if req.AgentId == 0 {
@@ -466,25 +447,20 @@ func (d *LotteryService) slotsFreeAward(req *services.SlotsDoBetFreeReq, win, to
 		return decimal.Zero, services.ErrorCode_PARAMS_INVALID
 	}
 
-	var exchange decimal.Decimal
-	var pc *config.Pool
-	if complete {
-		ex, ok := config.CfgIns.GetExchange(req.CurrencyType)
-		if !ok {
-			zap.L().Error("SlotsDoBetFree get exchange failed",
-				zap.String("currencyType", req.CurrencyType),
-				zap.String("roundId", req.RoundId))
-			return decimal.Zero, services.ErrorCode_SYSTEM_ERROR
-		}
-		exchange = ex
-		pc = config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
-		if pc == nil {
-			zap.L().Error("SlotsDoBetFree get pool cfg failed",
-				zap.Uint32("agentId", req.AgentId),
-				zap.String("roundId", req.RoundId),
-				zap.String("symbol", eGame.ConfName))
-			return decimal.Zero, services.ErrorCode_SYSTEM_ERROR
-		}
+	exchange, ok := config.CfgIns.GetExchange(req.CurrencyType)
+	if !ok {
+		zap.L().Error("SlotsDoBetFree get exchange failed",
+			zap.String("currencyType", req.CurrencyType),
+			zap.String("roundId", req.RoundId))
+		return decimal.Zero, services.ErrorCode_SYSTEM_ERROR
+	}
+	pc := config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
+	if pc == nil {
+		zap.L().Error("SlotsDoBetFree get pool cfg failed",
+			zap.Uint32("agentId", req.AgentId),
+			zap.String("roundId", req.RoundId),
+			zap.String("symbol", eGame.ConfName))
+		return decimal.Zero, services.ErrorCode_SYSTEM_ERROR
 	}
 
 	var newCurrency int64
@@ -518,40 +494,32 @@ func (d *LotteryService) slotsFreeAward(req *services.SlotsDoBetFreeReq, win, to
 			req.RecordJson,
 			nc,
 			uint32(eAgent.WebId),
-			complete,
 			totalBet.InexactFloat64(),
 			win.InexactFloat64(),
 		)
 		d.SaveRecord(record)
-		if complete {
-			zap.L().Info("SlotsDoBetFree:注单信息",
-				zap.Uint32("agentId", req.AgentId),
-				zap.Uint32("playerId", req.UserId),
-				zap.Uint32("gameId", req.GameId),
-				zap.String("symbol", eGame.ConfName),
-				zap.String("roundId", req.RoundId),
-				zap.Any("record", record))
+		zap.L().Info("SlotsDoBetFree:注单信息",
+			zap.Uint32("agentId", req.AgentId),
+			zap.Uint32("playerId", req.UserId),
+			zap.Uint32("gameId", req.GameId),
+			zap.String("symbol", eGame.ConfName),
+			zap.String("roundId", req.RoundId),
+			zap.Any("record", record))
+		billBet := decimal.Zero
+		if totalBet.GreaterThan(decimal.Zero) {
+			billBet = totalBet.Neg()
 		}
-		if complete || win.GreaterThan(decimal.Zero) {
-			billBet := decimal.Zero
-			if totalBet.GreaterThan(decimal.Zero) {
-				billBet = totalBet.Neg()
-			}
-			billAward := decimal.Zero
-			if win.GreaterThan(decimal.Zero) {
-				billAward = win
-			}
-			d.SaveBill(req.AgentId, req.UserId, billBet, billAward, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundId)
+		billAward := decimal.Zero
+		if win.GreaterThan(decimal.Zero) {
+			billAward = win
 		}
+		d.SaveBill(req.AgentId, req.UserId, billBet, billAward, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "返奖", req.CurrencyType, req.RoundId)
 	}
-	if complete {
-		dao.CacheIns().Complete(int64(req.AgentId), req.UserId, eGame.ConfName, totalBet.Mul(exchange), win.Mul(exchange), pc.Pool[1].Revenue)
-	}
+	dao.CacheIns().Complete(int64(req.AgentId), req.UserId, eGame.ConfName, totalBet.Mul(exchange), win.Mul(exchange), pc.Pool[1].Revenue)
 	return nc, services.ErrorCode_OK
 }
 
 // FruitDoBet 单人 Fruit 门面：复用 doSingleBet（规则 A：水池/注单/Complete 均走原逻辑）。
-// Complete 仅透传 req.Complete，由调用方显式标注。
 func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBetReq) (resp *services.FruitDoBetResp, err error) {
 	resp = &services.FruitDoBetResp{Code: services.ErrorCode_OK, Ret: false}
 	if req == nil {
@@ -568,6 +536,9 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 	if bet.IsNegative() {
 		return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
 	}
+	if strings.TrimSpace(req.RecordJson) == "" {
+		return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
+	}
 	win, winOK := parseAmountStrict(req.WinAmount)
 	if !winOK {
 		return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
@@ -576,12 +547,8 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 		return failFruitDoBet(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 
-	completeFlag := "0"
-	if req.Complete {
-		completeFlag = "1"
-	}
 	idemKey := buildIdempotencyKey("fruitDoBet", u32Str(req.UserId), u32Str(req.GameId), req.CurrencyType, req.RoundId)
-	idemSig := idempotencySignature(bet.String(), win.String(), req.RecordJson, completeFlag)
+	idemSig := idempotencySignature(bet.String(), win.String(), req.RecordJson)
 	if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
 		return failFruitDoBet(resp, code)
 	} else if hit {
@@ -598,7 +565,6 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 		Win:          win.String(),
 		RoundID:      req.RoundId,
 		Result:       req.RecordJson,
-		Complete:     req.Complete,
 		Bet:          bet.String(),
 		AgentId:      req.AgentId,
 		CurrencyType: req.CurrencyType,
@@ -631,7 +597,6 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 			zap.Uint32("agentId", req.AgentId),
 			zap.Uint32("gameId", req.GameId),
 			zap.String("roundId", req.RoundId),
-			zap.Bool("complete", req.Complete),
 			zap.String("currency", resp.Currency))
 	} else {
 		d.abortIdempotency(idemKey)
@@ -640,7 +605,7 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 }
 
 // FruitDoBetMulti 百人扣款门面。
-// 规则 A：复用 doMultiBet → deductBet（扣余额 + 改水池 + 流水）。
+// 规则 A：复用 doMultiBet（只扣余额，不改水池）。
 // 每次调用都是一次独立加注；roundId 常为 mp-{gameId}-{userId}，不能按局号做完成态幂等。
 func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.FruitDoBetMultiReq) (resp *services.FruitDoBetMultiResp, err error) {
 	resp = &services.FruitDoBetMultiResp{Code: services.ErrorCode_OK, Ret: false}
@@ -655,7 +620,7 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 	if !betOK {
 		return failFruitDoBetMulti(resp, services.ErrorCode_PARAMS_INVALID)
 	}
-	if !bet.GreaterThan(decimal.Zero) {
+	if bet.IsNegative() {
 		return failFruitDoBetMulti(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 
@@ -710,7 +675,7 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 }
 
 // FruitRefundMulti 百人退款门面。
-// 规则 A：复用 doMultiRefund → refundBet（退余额 + 回滚水池 + 流水）。
+// 规则 A：复用 doMultiRefund（只退余额，不改水池）。
 // 与加注一样按次独立退款，不做 roundId 完成态幂等。
 func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.FruitRefundMultiReq) (resp *services.FruitRefundMultiResp, err error) {
 	resp = &services.FruitRefundMultiResp{Code: services.ErrorCode_OK, Ret: false}
@@ -725,7 +690,7 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 	if !betOK {
 		return failFruitRefundMulti(resp, services.ErrorCode_PARAMS_INVALID)
 	}
-	if !bet.GreaterThan(decimal.Zero) {
+	if bet.IsNegative() {
 		return failFruitRefundMulti(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 
@@ -778,14 +743,14 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 }
 
 // FruitSettleRound 百人整局结算门面。
-// 规则 A：复用 doMultiSettle（入账模型为 win+bet；水池/注单/Complete 走原逻辑）。
+// 规则 A：复用 doMultiSettle（只入账 winAmount；totalBet 只用于记录）。
 func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.FruitSettleRoundReq) (resp *services.FruitSettleRoundResp, err error) {
 	resp = &services.FruitSettleRoundResp{
 		Code:    services.ErrorCode_OK,
 		Ret:     false,
 		Players: make([]*services.FruitSettlePlayerResult, 0),
 	}
-	if req == nil || len(req.Players) == 0 {
+	if req == nil {
 		return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
 	}
 	if code, _ := validateFacadeRoom(req.AgentId, req.GameId, req.RoundId, req.CurrencyType); code != services.ErrorCode_OK {
@@ -818,6 +783,9 @@ func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.Fru
 		if !betOK || bet.IsNegative() {
 			return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
 		}
+		if strings.TrimSpace(p.RecordJson) == "" {
+			return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
+		}
 		totalWin = totalWin.Add(win)
 
 		records = append(records, &settleRecord{
@@ -834,10 +802,15 @@ func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.Fru
 	}
 
 	idemKey := buildIdempotencyKey("fruitSettleRound", u32Str(req.AgentId), u32Str(req.GameId), req.CurrencyType, i64Str(req.Period), req.RoundId)
-	sigParts := make([]string, 0, len(records)*3+1)
+	signaturePlayers := append([]*services.FruitSettlePlayer(nil), req.Players...)
+	sort.Slice(signaturePlayers, func(left, right int) bool {
+		return signaturePlayers[left].UserId < signaturePlayers[right].UserId
+	})
+	sigParts := make([]string, 0, len(records)*6+1)
 	sigParts = append(sigParts, totalWin.String())
-	for _, r := range records {
-		sigParts = append(sigParts, u32Str(r.UserId), r.Bet, r.Win)
+	for _, player := range signaturePlayers {
+		sigParts = append(sigParts, u32Str(player.UserId), player.UserName, i64Str(int64(player.UserIcon)),
+			parseAmount(player.TotalBet).String(), parseAmount(player.WinAmount).String(), player.RecordJson)
 	}
 	idemSig := idempotencySignature(sigParts...)
 	if hit, payload, code := d.beginIdempotency(idemKey, idemSig); code != services.ErrorCode_OK {
