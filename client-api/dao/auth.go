@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -173,9 +174,23 @@ func GetLoginProfile(userId uint32) (*LoginProfile, bool, bool) {
 }
 
 func GetBalanceCent(userId uint32) (int64, error) {
-	cent, err := Redis().GetPlayerCurrencyCent(userId)
-	if err == redis.Nil {
+	if userId == 0 {
 		return 0, redis.Nil
 	}
-	return cent, err
+	if rds := Redis(); rds != nil {
+		cent, err := rds.GetPlayerCurrencyCent(userId)
+		if err == nil {
+			return cent, nil
+		}
+		if err != redis.Nil {
+			return 0, err
+		}
+	}
+	// A newly logged-in player may not have a player_* Redis hash yet. The
+	// database is authoritative, so hydrate the balance instead of returning 0.
+	player, err := DB().GetPlayer(userId)
+	if err != nil {
+		return 0, err
+	}
+	return player.Score.Mul(decimal.NewFromInt(100)).IntPart(), nil
 }

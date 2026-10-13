@@ -47,6 +47,7 @@ func (h *BalanceHandler) GetBalance(c *gin.Context) {
 			CurrencyCent: cent,
 		}, nil
 	})
+	zap.L().Info("GetBalance result", zap.Uint32("userId", userId), zap.Int64("currencyCent", payload.CurrencyCent), zap.Error(err))
 	if err != nil {
 		zap.L().Error("GetBalance failed", zap.Uint32("userId", userId), zap.Error(err))
 		common.Fail(c, http.StatusOK, common.CodeSystemError, "余额查询失败")

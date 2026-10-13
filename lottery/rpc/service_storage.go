@@ -20,11 +20,13 @@ func (d *LotteryService) GetBalance(_ context.Context, req *services.GetBalanceR
 
 	cent, code := d.getPlayerCurrency(req.UserId)
 	if code != services.ErrorCode_OK {
+		zap.L().Error("GetBalance failed", zap.Uint32("userId", req.UserId), zap.Any("code", code))
 		resp.Code = code
 		return resp, nil
 	}
 	resp.CurrencyCent = cent
 	resp.Currency = decimal.NewFromInt(cent).Div(decimal.NewFromInt(100)).Truncate(2).StringFixed(2)
+	zap.L().Info("GetBalance result", zap.Uint32("userId", req.UserId), zap.Int64("currencyCent", cent), zap.String("currency", resp.Currency))
 	return resp, nil
 }
 
