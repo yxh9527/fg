@@ -28,6 +28,8 @@ const (
 	LotteryService_SlotsDoBetFree_FullMethodName    = "/lottery.LotteryService/SlotsDoBetFree"
 	LotteryService_Ug5Guess_FullMethodName          = "/lottery.LotteryService/Ug5Guess"
 	LotteryService_FruitDoBet_FullMethodName        = "/lottery.LotteryService/FruitDoBet"
+	LotteryService_Luck5Deal_FullMethodName         = "/lottery.LotteryService/Luck5Deal"
+	LotteryService_Luck5Settle_FullMethodName       = "/lottery.LotteryService/Luck5Settle"
 	LotteryService_FruitDoBetMulti_FullMethodName   = "/lottery.LotteryService/FruitDoBetMulti"
 	LotteryService_FruitRefundMulti_FullMethodName  = "/lottery.LotteryService/FruitRefundMulti"
 	LotteryService_FruitSettleRound_FullMethodName  = "/lottery.LotteryService/FruitSettleRound"
@@ -52,6 +54,8 @@ type LotteryServiceClient interface {
 	// UG5 竞猜：每次增量结算，complete 时才写整链注单
 	Ug5Guess(ctx context.Context, in *Ug5GuessReq, opts ...grpc.CallOption) (*Ug5GuessResp, error)
 	FruitDoBet(ctx context.Context, in *FruitDoBetReq, opts ...grpc.CallOption) (*FruitDoBetResp, error)
+	Luck5Deal(ctx context.Context, in *Luck5DealReq, opts ...grpc.CallOption) (*Luck5Resp, error)
+	Luck5Settle(ctx context.Context, in *Luck5SettleReq, opts ...grpc.CallOption) (*Luck5Resp, error)
 	FruitDoBetMulti(ctx context.Context, in *FruitDoBetMultiReq, opts ...grpc.CallOption) (*FruitDoBetMultiResp, error)
 	FruitRefundMulti(ctx context.Context, in *FruitRefundMultiReq, opts ...grpc.CallOption) (*FruitRefundMultiResp, error)
 	FruitSettleRound(ctx context.Context, in *FruitSettleRoundReq, opts ...grpc.CallOption) (*FruitSettleRoundResp, error)
@@ -156,6 +160,26 @@ func (c *lotteryServiceClient) FruitDoBet(ctx context.Context, in *FruitDoBetReq
 	return out, nil
 }
 
+func (c *lotteryServiceClient) Luck5Deal(ctx context.Context, in *Luck5DealReq, opts ...grpc.CallOption) (*Luck5Resp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Luck5Resp)
+	err := c.cc.Invoke(ctx, LotteryService_Luck5Deal_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *lotteryServiceClient) Luck5Settle(ctx context.Context, in *Luck5SettleReq, opts ...grpc.CallOption) (*Luck5Resp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Luck5Resp)
+	err := c.cc.Invoke(ctx, LotteryService_Luck5Settle_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *lotteryServiceClient) FruitDoBetMulti(ctx context.Context, in *FruitDoBetMultiReq, opts ...grpc.CallOption) (*FruitDoBetMultiResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FruitDoBetMultiResp)
@@ -214,6 +238,8 @@ type LotteryServiceServer interface {
 	// UG5 竞猜：每次增量结算，complete 时才写整链注单
 	Ug5Guess(context.Context, *Ug5GuessReq) (*Ug5GuessResp, error)
 	FruitDoBet(context.Context, *FruitDoBetReq) (*FruitDoBetResp, error)
+	Luck5Deal(context.Context, *Luck5DealReq) (*Luck5Resp, error)
+	Luck5Settle(context.Context, *Luck5SettleReq) (*Luck5Resp, error)
 	FruitDoBetMulti(context.Context, *FruitDoBetMultiReq) (*FruitDoBetMultiResp, error)
 	FruitRefundMulti(context.Context, *FruitRefundMultiReq) (*FruitRefundMultiResp, error)
 	FruitSettleRound(context.Context, *FruitSettleRoundReq) (*FruitSettleRoundResp, error)
@@ -254,6 +280,12 @@ func (UnimplementedLotteryServiceServer) Ug5Guess(context.Context, *Ug5GuessReq)
 }
 func (UnimplementedLotteryServiceServer) FruitDoBet(context.Context, *FruitDoBetReq) (*FruitDoBetResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method FruitDoBet not implemented")
+}
+func (UnimplementedLotteryServiceServer) Luck5Deal(context.Context, *Luck5DealReq) (*Luck5Resp, error) {
+	return nil, status.Error(codes.Unimplemented, "method Luck5Deal not implemented")
+}
+func (UnimplementedLotteryServiceServer) Luck5Settle(context.Context, *Luck5SettleReq) (*Luck5Resp, error) {
+	return nil, status.Error(codes.Unimplemented, "method Luck5Settle not implemented")
 }
 func (UnimplementedLotteryServiceServer) FruitDoBetMulti(context.Context, *FruitDoBetMultiReq) (*FruitDoBetMultiResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method FruitDoBetMulti not implemented")
@@ -450,6 +482,42 @@ func _LotteryService_FruitDoBet_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LotteryService_Luck5Deal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Luck5DealReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LotteryServiceServer).Luck5Deal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LotteryService_Luck5Deal_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LotteryServiceServer).Luck5Deal(ctx, req.(*Luck5DealReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LotteryService_Luck5Settle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Luck5SettleReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LotteryServiceServer).Luck5Settle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LotteryService_Luck5Settle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LotteryServiceServer).Luck5Settle(ctx, req.(*Luck5SettleReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _LotteryService_FruitDoBetMulti_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FruitDoBetMultiReq)
 	if err := dec(in); err != nil {
@@ -564,6 +632,14 @@ var LotteryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FruitDoBet",
 			Handler:    _LotteryService_FruitDoBet_Handler,
+		},
+		{
+			MethodName: "Luck5Deal",
+			Handler:    _LotteryService_Luck5Deal_Handler,
+		},
+		{
+			MethodName: "Luck5Settle",
+			Handler:    _LotteryService_Luck5Settle_Handler,
 		},
 		{
 			MethodName: "FruitDoBetMulti",

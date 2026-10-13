@@ -24,6 +24,8 @@ service LotteryService {
     // UG5 竞猜：每次增量结算，complete 时才写整链注单
     rpc Ug5Guess(Ug5GuessReq) returns (Ug5GuessResp);
     rpc FruitDoBet(FruitDoBetReq) returns (FruitDoBetResp);
+    rpc Luck5Deal(Luck5DealReq) returns (Luck5Resp);
+    rpc Luck5Settle(Luck5SettleReq) returns (Luck5Resp);
     rpc FruitDoBetMulti(FruitDoBetMultiReq) returns (FruitDoBetMultiResp);
     rpc FruitRefundMulti(FruitRefundMultiReq) returns (FruitRefundMultiResp);
     rpc FruitSettleRound(FruitSettleRoundReq) returns (FruitSettleRoundResp);
@@ -189,6 +191,33 @@ message FruitDoBetResp {
     bool ret = 2;
     string currency = 3;
     int64 currencyCent = 4;
+}
+
+message Luck5DealReq {
+    uint32 userId = 1;
+    uint32 agentId = 2;
+    uint32 gameId = 3;
+    string currencyType = 4;
+    string roundId = 5;
+    string betAmount = 6;
+    string reserveAmount = 7;
+}
+
+message Luck5SettleReq {
+    uint32 userId = 1;
+    uint32 agentId = 2;
+    uint32 gameId = 3;
+    string currencyType = 4;
+    string roundId = 5;
+    string winAmount = 6;
+    string recordJson = 7;
+}
+
+message Luck5Resp {
+    base.error_code code = 1;
+    bool ret = 2;
+    int64 currencyCent = 3;
+    string error = 4;
 }
 
 message FruitDoBetMultiReq {
