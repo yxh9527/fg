@@ -13,6 +13,7 @@ import (
 type AuthResult struct {
 	Success      bool
 	UserId       uint32
+	GameId       uint32
 	IsReEnter    bool
 	AttemptCount int64
 	Message      string
@@ -87,6 +88,9 @@ func Authenticate(token string, gameId, entryUserId uint32) *AuthResult {
 	out.Success = true
 	out.Unauthorized = false
 	out.UserId = uint32(session.UserId)
+	if session.GameId > 0 {
+		out.GameId = uint32(session.GameId)
+	}
 	out.AttemptCount = session.AuthCount
 	out.IsReEnter = session.AuthCount > 1
 	if out.IsReEnter {

@@ -32,6 +32,7 @@ type validateReq struct {
 type authResultCache struct {
 	Success      bool   `json:"success"`
 	UserId       uint32 `json:"userId"`
+	GameId       uint32 `json:"gameId"`
 	IsReEnter    bool   `json:"isReEnter"`
 	AttemptCount int64  `json:"attemptCount"`
 	Message      string `json:"message"`
@@ -54,6 +55,7 @@ func (h *AuthHandler) Authenticate(c *gin.Context) {
 		return &authResultCache{
 			Success:      resp.Success,
 			UserId:       resp.UserId,
+			GameId:       resp.GameId,
 			IsReEnter:    resp.IsReEnter,
 			AttemptCount: resp.AttemptCount,
 			Message:      resp.Message,
@@ -72,6 +74,7 @@ func (h *AuthHandler) Authenticate(c *gin.Context) {
 	out := gin.H{
 		"success":      payload.Success,
 		"userId":       payload.UserId,
+		"gameId":       payload.GameId,
 		"isReEnter":    payload.IsReEnter,
 		"attemptCount": payload.AttemptCount,
 		"message":      payload.Message,
