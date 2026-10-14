@@ -111,89 +111,68 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 		}
 	}
 	code := services.ErrorCode_SYSTEM_ERROR
-	keyTypes := map[string]string{
-		playerKey: "hash", roundKey: "string", "dirty_list_imp": "set",
+	storedRaw, readErr := rd.cli.Get(ctx, roundKey).Result()
+	if readErr != nil && !errors.Is(readErr, redis.Nil) {
+		return code, readErr
 	}
-	if round.IsTourist == 0 {
-		for _, key := range []string{esindex.AgentEffectData(), esindex.AgentProfitLossData(), esindex.AgentChipsData(), "userTotalEffBet", "userTotalProfLoss", "userBetCount"} {
-			keyTypes[key] = "zset"
+	if settle {
+		stored := &Luck5Round{}
+		if readErr != nil || jsoniter.UnmarshalFromString(storedRaw, stored) != nil || stored.FundsDone || !sameLuck5Identity(stored, round) {
+			return code, errors.New("round stage changed")
 		}
+	} else if readErr == nil {
+		return code, errors.New("round already exists")
 	}
-	watchKeys := make([]string, 0, len(keyTypes))
-	for key := range keyTypes {
-		watchKeys = append(watchKeys, key)
+	current, err := rd.cli.HGet(ctx, playerKey, "currency").Int64()
+	if err != nil {
+		return code, err
 	}
-	err := rd.cli.Watch(ctx, func(tx *redis.Tx) error {
-		// MULTI 不会回滚执行时的类型错误，因此先核对并 WATCH 全部写入键。
-		for key, expected := range keyTypes {
-			actual, err := tx.Type(ctx, key).Result()
-			if err != nil {
-				return err
+	if current < 0 {
+		return code, errors.New("invalid player balance")
+	}
+	if settle {
+		if round.WinCent > math.MaxInt64-current {
+			code = services.ErrorCode_PARAMS_INVALID
+			return code, errors.New("balance overflow")
+		}
+		round.Balance = current + round.WinCent
+		round.FundsDone = true
+	} else {
+		if current < round.BetCent {
+			code = services.ErrorCode_NO_ENOUGH_MONEY
+			return code, errors.New("balanceInsufficient")
+		}
+		round.DealBalance = current - round.BetCent
+		round.Balance = round.DealBalance
+	}
+	raw, err := jsoniter.MarshalToString(round)
+	if err != nil {
+		return code, err
+	}
+	_, err = rd.cli.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.HSet(ctx, playerKey, "currency", round.Balance)
+		pipe.Expire(ctx, playerKey, 20*time.Minute)
+		pipe.SAdd(ctx, "dirty_list_imp", round.UserId)
+		pipe.Set(ctx, roundKey, raw, 0)
+		if round.IsTourist == 0 {
+			member := fmt.Sprintf("%d_%s", agent.Id, round.Symbol)
+			userMember := strconv.FormatUint(uint64(round.UserId), 10)
+			if settle {
+				pipe.ZIncrBy(ctx, esindex.AgentProfitLossData(), win.Sub(reserve).InexactFloat64(), member)
+				pipe.ZIncrBy(ctx, esindex.AgentChipsData(), decimal.Max(bet, win).InexactFloat64(), member)
+				pipe.ZIncrBy(ctx, "userTotalProfLoss", win.InexactFloat64(), userMember)
+				pipe.ZIncrBy(ctx, "userBetCount", 1, userMember)
+			} else {
+				pipe.ZIncrBy(ctx, esindex.AgentEffectData(), bet.InexactFloat64(), member)
+				pipe.ZIncrBy(ctx, esindex.AgentProfitLossData(), reserve.InexactFloat64(), member)
+				pipe.ZIncrBy(ctx, "userTotalEffBet", bet.InexactFloat64(), userMember)
 			}
-			if actual != "none" && actual != expected {
-				return fmt.Errorf("invalid Redis type for %s", key)
-			}
 		}
-		storedRaw, readErr := tx.Get(ctx, roundKey).Result()
-		if readErr != nil && !errors.Is(readErr, redis.Nil) {
-			return readErr
-		}
-		if settle {
-			stored := &Luck5Round{}
-			if readErr != nil || jsoniter.UnmarshalFromString(storedRaw, stored) != nil || stored.FundsDone || !sameLuck5Identity(stored, round) {
-				return errors.New("round stage changed")
-			}
-		} else if readErr == nil {
-			return errors.New("round already exists")
-		}
-		current, err := tx.HGet(ctx, playerKey, "currency").Int64()
-		if err != nil {
-			return err
-		}
-		if current < 0 {
-			return errors.New("invalid player balance")
-		}
-		if settle {
-			if round.WinCent > math.MaxInt64-current {
-				code = services.ErrorCode_PARAMS_INVALID
-				return errors.New("balance overflow")
-			}
-			round.Balance = current + round.WinCent
-			round.FundsDone = true
-		} else {
-			if current < round.BetCent {
-				code = services.ErrorCode_NO_ENOUGH_MONEY
-				return errors.New("balanceInsufficient")
-			}
-			round.DealBalance = current - round.BetCent
-			round.Balance = round.DealBalance
-		}
-		raw, err := jsoniter.MarshalToString(round)
-		if err != nil {
-			return err
-		}
-		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-			pipe.HSet(ctx, playerKey, "currency", round.Balance)
-			pipe.Expire(ctx, playerKey, 20*time.Minute)
-			pipe.SAdd(ctx, "dirty_list_imp", round.UserId)
-			pipe.Set(ctx, roundKey, raw, 0)
-			if round.IsTourist == 0 {
-				member := fmt.Sprintf("%d_%s", agent.Id, round.Symbol)
-				pipe.ZAdd(ctx, esindex.AgentEffectData(), redis.Z{Member: member, Score: nextGame.TotalEffectBet.InexactFloat64()})
-				pipe.ZAdd(ctx, esindex.AgentProfitLossData(), redis.Z{Member: member, Score: nextGame.TotalProfLoss.InexactFloat64()})
-				pipe.ZAdd(ctx, esindex.AgentChipsData(), redis.Z{Member: member, Score: nextGame.TotalChips.InexactFloat64()})
-				userMember := strconv.FormatUint(uint64(round.UserId), 10)
-				pipe.ZAdd(ctx, "userTotalEffBet", redis.Z{Member: userMember, Score: nextUser.TotalEffectBet.InexactFloat64()})
-				pipe.ZAdd(ctx, "userTotalProfLoss", redis.Z{Member: userMember, Score: nextUser.TotalProfLoss.InexactFloat64()})
-				pipe.ZAdd(ctx, "userBetCount", redis.Z{Member: userMember, Score: nextUser.Count.InexactFloat64()})
-			}
-			return nil
-		})
-		if err == nil {
-			code = services.ErrorCode_OK
-		}
-		return err
-	}, watchKeys...)
+		return nil
+	})
+	if err == nil {
+		code = services.ErrorCode_OK
+	}
 	if err != nil {
 		// EXEC 回包丢失时确认持久化阶段；不盲目再扣钱包或恢复旧池快照。
 		stored, readErr := rd.loadLuck5Round(context.Background(), round.RoundId)
