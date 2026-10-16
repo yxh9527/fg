@@ -493,12 +493,19 @@ func (rd *RedisDao) Subscribe(channel string, registryInfo func() *event.EventMg
 		//关闭订阅
 		defer sub.Close()
 		for msg := range sub.Channel() {
-			pack := &entity.Msg{}
-			if err := jsoniter.UnmarshalFromString(msg.Payload, pack); err != nil {
-				zap.L().Error("收到无法解析的推送", zap.Any("msg", msg))
-			} else {
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						zap.L().Error("处理广播消息panic", zap.Any("error", err))
+					}
+				}()
+				pack := &entity.Msg{}
+				if err := jsoniter.UnmarshalFromString(msg.Payload, pack); err != nil {
+					zap.L().Error("收到无法解析的推送", zap.Any("msg", msg))
+					return
+				}
 				event.OnEvent(pack)
-			}
+			}()
 		}
 	}()
 }
@@ -568,15 +575,21 @@ func ConfigsInit() {
 			Award: &AwardMgr{
 				Data: make(map[string]*AwardConfig),
 			},
-			System: &SystemConfig{},
+			Coefficient: DefaultControlCoefficientConfig(),
+			System:      &SystemConfig{},
 			Currency: &CurrencyMgr{
 				Data: make(map[string]decimal.Decimal),
+			},
+			AC: &AutoCtrlMgr{
+				Ctrls: make([]*AutoCtrlItem, 0),
 			},
 		}
 		//加载默认配置
 		LoadConfigs(RedisIns(), esindex.ConfigPattern())
+		LoadConfigs(RedisIns(), "/config/*")
 		//加载代理配置
 		LoadConfigs(RedisIns(), esindex.AgentPattern())
+		LoadConfigs(RedisIns(), "/agent/*")
 	}
 }
 

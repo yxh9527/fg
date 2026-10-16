@@ -889,6 +889,25 @@ export const saveGameAwardConfig = (params) =>
     },
   });
 
+export const getControlCoefficientConfig = () =>
+  request({
+    url: "v2/game/getControlCoefficientData",
+    method: "post",
+    params: {
+      token: getToken(),
+    },
+  });
+
+export const saveControlCoefficientConfig = (params) =>
+  request({
+    url: "v2/game/saveControlCoefficientData",
+    method: "post",
+    params: {
+      token: getToken(),
+      ...params,
+    },
+  });
+
 export const syncAllPoolConfig = (params) =>
   request({
     url: "v2/game/syncAllPool",

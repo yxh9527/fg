@@ -1,4 +1,4 @@
-﻿package v2
+package v2
 
 import (
 	"app/config"
@@ -152,6 +152,7 @@ func PoolEdit(ctx *gin.Context) {
 	if rawKey != key {
 		_ = dao.RedisIns().Del(rawKey)
 	}
+	dao.ParseConfig(key, value)
 	dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
 		"key":  key,
 		"data": value,
@@ -160,7 +161,11 @@ func PoolEdit(ctx *gin.Context) {
 		"event": "config",
 		"data":  dataStr,
 	})
-	dao.RedisIns().Publish("message", str)
+	if pubErr := dao.RedisIns().Publish("message", str); pubErr != nil {
+		zap.L().Error("发布水池配置失败", zap.Any("err", pubErr), zap.String("key", key))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "配置已保存，但同步到开奖服务失败", Data: nil})
+		return
+	}
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
 }
 
@@ -1237,6 +1242,23 @@ func GovernUser(ctx *gin.Context) {
 	userId, _ := strconv.ParseInt(strUserId, 10, 64)
 	rate, _ := decimal.NewFromString(ctx.Query("rate"))
 	rate_score, _ := decimal.NewFromString(ctx.Query("rate_score"))
+	if userId <= 0 {
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "参数异常", Data: nil})
+		return
+	}
+
+	if rate.Equal(decimal.Zero) && rate_score.Equal(decimal.Zero) {
+		dao.RedisIns().Client.HDel(context.Background(), "user_ctl", strUserId)
+		dao.Mysql().Manager.Model(manager.User{}).Debug().Exec("update gp_user set isCtl=0 where id=?", userId)
+		dataStr, _ := jsoniter.MarshalToString(&entity.DelPlayerSingleCtrl{Uid: uint32(userId)})
+		msg, _ := jsoniter.MarshalToString(map[string]interface{}{
+			"event": "delSingleCtrl",
+			"data":  dataStr,
+		})
+		dao.RedisIns().Publish("message", msg)
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
+		return
+	}
 
 	str := dao.RedisIns().Client.HGet(context.Background(), "user_ctl", strUserId).Val()
 	uc := &view.UserSingleControl{}
@@ -1254,6 +1276,19 @@ func GovernUser(ctx *gin.Context) {
 	dao.Mysql().Manager.Model(manager.User{}).Debug().Exec("update gp_user set isCtl=1,controlNumber=controlNumber+1 where id=?", userId)
 	uc.CreateTime = time.Now().Unix()
 	dao.Es().Index().Index(esindex.UserController()).BodyJson(uc).Do(context.Background())
+
+	dataStr, _ := jsoniter.MarshalToString(&entity.AddPlayerSingleCtrl{
+		Uid:         uint32(userId),
+		RemainScore: rate_score,
+		CtrlScore:   rate_score,
+		UpdateTime:  uc.CreateTime,
+		Rate:        rate,
+	})
+	msg, _ := jsoniter.MarshalToString(map[string]interface{}{
+		"event": "addSingleCtrl",
+		"data":  dataStr,
+	})
+	dao.RedisIns().Publish("message", msg)
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
 }
 

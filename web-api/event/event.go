@@ -23,8 +23,8 @@ func (em *EventMgr) OnEvent(msg *entity.Msg) {
 	event := em.Events[msg.Event]
 	if event != nil {
 		data := reflect.New(event.T).Interface()
-		if err := jsoniter.UnmarshalFromString(msg.Data, &data); err != nil {
-			zap.L().Error("消息解析失败", zap.Any("err", err))
+		if err := jsoniter.UnmarshalFromString(msg.Data, data); err != nil {
+			zap.L().Error("消息解析失败", zap.Any("err", err), zap.String("event", msg.Event))
 			return
 		}
 		go func() {

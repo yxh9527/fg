@@ -94,7 +94,7 @@
         </div>
         <div class="field-inline">
           <label>控制概率</label>
-          <el-input-number v-model="currentAutoParams.controlRate" :min="-1" :step="0.01" />
+          <el-input-number v-model="currentAutoParams.controlRate" :min="-100" :max="100" :step="0.01" />
         </div>
         <div class="field-inline">
           <label>控制分数</label>
@@ -398,6 +398,10 @@ export default {
       this.autoParams = raw ? JSON.parse(raw) : [];
     },
     addAutoParam() {
+      if (Math.abs(Number(this.currentAutoParams.controlRate)) > 100) {
+        this.$message.error("控制概率必须在 0~100 范围内");
+        return;
+      }
       const exists = this.autoParams.find(
         (item) => item.controlRate === this.currentAutoParams.controlRate
       );

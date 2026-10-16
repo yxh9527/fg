@@ -1,4 +1,4 @@
-﻿package v2
+package v2
 
 import (
 	"app/config"
@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/olivere/elastic/v7"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -261,11 +262,20 @@ func SaveSingleCtrlConfig(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "参数异常", Data: nil})
 		return
 	}
+	hundred := decimal.NewFromInt(100)
 	for _, v := range asc {
 		a := &view.AutoSingleCtrl{}
 		if err := jsoniter.UnmarshalFromString(v, a); err != nil {
 			zap.L().Error("解析参数失败", zap.Any("err", err))
 			ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "参数异常", Data: nil})
+			return
+		}
+		if a.ControlRate.Abs().GreaterThan(hundred) {
+			ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "控制概率必须在0~100范围内", Data: nil})
+			return
+		}
+		if a.Score.LessThan(decimal.Zero) {
+			ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "控制分数不能为负", Data: nil})
 			return
 		}
 		items = append(items, a)
@@ -278,16 +288,7 @@ func SaveSingleCtrlConfig(ctx *gin.Context) {
 		return
 	}
 
-	dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
-		"key":  esindex.ConfigKey("autoCtrl"),
-		"data": str,
-	})
-	msg, _ := jsoniter.MarshalToString(map[string]interface{}{
-		"event": "config",
-		"data":  dataStr,
-	})
-	dao.RedisIns().Publish("message", msg)
-
+	publishConfigMessage(esindex.ConfigKey("autoCtrl"), str)
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
 }
 
@@ -310,17 +311,18 @@ func SaveGameSettingData(ctx *gin.Context) {
 	if err != nil {
 		zap.L().Error("配置异常", zap.Any("err", err))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "失败", Data: str})
-	} else {
-		key := esindex.ConfigKey("ctrl", "default")
-		str, _ = jsoniter.MarshalToString(ac)
-		err = dao.RedisIns().Set(key, str, -1)
-		if err != nil {
-			zap.L().Error("保存配置失败", zap.Any("err", err))
-			ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "失败", Data: str})
-		} else {
-			ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: str})
-		}
+		return
 	}
+	key := esindex.ConfigKey("ctrl", "default")
+	str, _ = jsoniter.MarshalToString(ac)
+	err = dao.RedisIns().Set(key, str, -1)
+	if err != nil {
+		zap.L().Error("保存配置失败", zap.Any("err", err))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "失败", Data: str})
+		return
+	}
+	publishConfigMessage(key, str)
+	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: str})
 }
 
 func GetGameSettingData(ctx *gin.Context) {
@@ -443,4 +445,58 @@ func GameCurrencys(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: str})
+}
+
+func GetControlCoefficientData(ctx *gin.Context) {
+	key := esindex.ConfigKey("controlCoefficient")
+	str, err := dao.RedisIns().Get(key)
+	if err != nil || str == "" {
+		if raw, err2 := dao.RedisIns().Get("/config/controlCoefficient"); err2 == nil && raw != "" {
+			str = raw
+		} else {
+			str, _ = jsoniter.MarshalToString(config.DefaultControlCoefficientConfig())
+		}
+	}
+	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: str})
+}
+
+func SaveControlCoefficientData(ctx *gin.Context) {
+	value := config.DefaultControlCoefficientConfig()
+	str := ctx.Query("config")
+	if err := jsoniter.UnmarshalFromString(str, value); err != nil {
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Msg: "控制系数配置格式错误", Data: nil})
+		return
+	}
+	if value.Bet == nil || value.Single == nil || value.SingleRounds.LessThan(decimal.Zero) {
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Msg: "控制系数配置不能为空", Data: nil})
+		return
+	}
+	for _, item := range append(value.Bet, value.Single...) {
+		if item == nil || item.Coefficient.LessThan(decimal.Zero) || item.Coefficient.GreaterThan(decimal.NewFromInt(1)) {
+			ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Msg: "控制系数必须在 0 到 1 之间", Data: nil})
+			return
+		}
+	}
+	str, _ = jsoniter.MarshalToString(value)
+	key := esindex.ConfigKey("controlCoefficient")
+	if err := dao.RedisIns().Set(key, str, -1); err != nil {
+		zap.L().Error("保存控制系数配置失败", zap.Error(err))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "保存失败", Data: nil})
+		return
+	}
+	config.CfgIns.SetControlCoefficient(value)
+	publishConfigMessage(key, str)
+	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: str})
+}
+
+func publishConfigMessage(key, value string) {
+	dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
+		"key":  key,
+		"data": value,
+	})
+	msg, _ := jsoniter.MarshalToString(map[string]interface{}{
+		"event": "config",
+		"data":  dataStr,
+	})
+	dao.RedisIns().Publish("message", msg)
 }

@@ -2,9 +2,9 @@ package dao
 
 import (
 	"app/cfgparse"
-	"app/esindex"
 	"app/config"
 	"app/entity"
+	"app/esindex"
 	"context"
 	"fmt"
 	"micro_service/services"
@@ -55,7 +55,7 @@ func NewRedisDao(hosts []string, user, pwd string) {
 
 // 配置同步
 func ConfigHandler(data interface{}) {
-	msg, _ := data.(*entity.ConfigMsg)
+	msg := data.(*entity.ConfigMsg)
 	ParseConfig(msg.Key, msg.Data)
 }
 
@@ -332,13 +332,20 @@ func (rd *RedisDao) Subscribe(channel string, registryInfo func() *event.EventMg
 		//关闭订阅
 		defer sub.Close()
 		for msg := range sub.Channel() {
-			pack := &entity.Msg{}
-			if err := jsoniter.UnmarshalFromString(msg.Payload, pack); err != nil {
-				zap.L().Error("收到无法解析的推送", zap.Any("msg", msg.Payload), zap.Any("err", err))
-			} else {
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						zap.L().Error("处理广播消息panic", zap.Any("error", err))
+					}
+				}()
+				pack := &entity.Msg{}
+				if err := jsoniter.UnmarshalFromString(msg.Payload, pack); err != nil {
+					zap.L().Error("收到无法解析的推送", zap.Any("msg", msg.Payload), zap.Any("err", err))
+					return
+				}
 				zap.L().Debug("收到事件广播", zap.Any("data", pack))
 				event.OnEvent(pack)
-			}
+			}()
 		}
 	}()
 }
@@ -408,15 +415,21 @@ func ConfigsInit() {
 			Award: &config.AwardMgr{
 				Data: make(map[string]*config.AwardConfig),
 			},
-			System: &config.SystemConfig{},
+			Coefficient: config.DefaultControlCoefficientConfig(),
+			System:      &config.SystemConfig{},
 			Currency: &config.CurrencyMgr{
 				Data: make(map[string]decimal.Decimal),
+			},
+			AC: &config.AutoCtrlMgr{
+				Ctrls: make([]*config.AutoCtrlItem, 0),
 			},
 		}
 		//加载默认配置
 		LoadConfigs(RedisIns(), esindex.ConfigPattern())
+		LoadConfigs(RedisIns(), "/config/*")
 		//加载代理配置
 		LoadConfigs(RedisIns(), esindex.AgentPattern())
+		LoadConfigs(RedisIns(), "/agent/*")
 	}
 }
 

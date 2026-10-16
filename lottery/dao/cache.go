@@ -657,30 +657,30 @@ func (gcm *GameCacheMgr) Lottery(agentId int64, userId int32, pc *config.Pool, s
 		}
 	}
 	item := cItems.PoolOdds[t]
-	zap.L().Debug("Lottery:pool配置", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("rate", rate), zap.Any("水池状态", t), zap.Any("item", cItems))
+	m := item.M
 	//水池余额*百分比
 	p1 := pool.Mul(r)
-	// 平均打码量 A：averageBet>0 且 bet>0 用 averageBet，否则 bet>0 用 bet
 	avg := bet
-	if averageBet.GreaterThan(decimal.Zero) && bet.GreaterThan(decimal.Zero) {
+	if averageBet.GreaterThan(decimal.Zero) {
 		avg = averageBet
 	}
-	//平均值*倍数
-	p2 := avg.Mul(item.M)
+	p2 := avg.Mul(m)
 	//p1、p2取最小值
 	p := p1
 	if p1.GreaterThan(p2) {
 		p = p2
-		zap.L().Debug("Lottery:使用平均值", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", p), zap.Any("平均打码", avg), zap.Any("averageBet", averageBet), zap.Any("bet", bet), zap.Any("配置详情", item))
+		zap.L().Debug("Lottery:使用平均投注倍数上限", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", p), zap.Any("平均投注", avg), zap.Any("总投注", user.TotalEffectBet), zap.Any("投注数量", user.Count), zap.Any("配置详情", item))
 	} else {
-		zap.L().Debug("Lottery:使用水池值", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", p), zap.Any("平均打码", avg), zap.Any("averageBet", averageBet), zap.Any("bet", bet), zap.Any("总盈亏", game.TotalProfLoss), zap.Any("总税收", game.TotalRevenue), zap.Any("基数", pc.Pool[1].Base), zap.Any("倍数", item.M))
+		zap.L().Debug("Lottery:使用水池值", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", p), zap.Any("平均投注", avg), zap.Any("总投注", user.TotalEffectBet), zap.Any("总盈亏", game.TotalProfLoss), zap.Any("总税收", game.TotalRevenue), zap.Any("基数", pc.Pool[1].Base), zap.Any("投注数量", user.Count), zap.Any("倍数", m))
 	}
-	//是否够陪
-	if p.LessThan(award) {
-		zap.L().Debug("Lottery:赔付失败", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", p), zap.Any("返奖值", award))
+	coefficient := config.CfgIns.GetControlCoefficient(avg, user.TotalEffectBet, user.TotalProfLoss, user.Count, config.CfgIns.IsSingleControlEnabled(user.Count))
+	controlledLimit := p.Mul(coefficient).Truncate(4)
+	zap.L().Debug("Lottery:pool配置", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("rate", rate), zap.Any("水池状态", t), zap.Any("item", cItems), zap.Any("倍数", m), zap.Any("控制系数", coefficient), zap.Any("原始可赔付", p), zap.Any("控制后上限", controlledLimit), zap.Any("最终赔付", award))
+	if controlledLimit.LessThan(award) {
+		zap.L().Debug("Lottery:赔付失败", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", controlledLimit), zap.Any("返奖值", award))
 		return pool, false
 	}
-	zap.L().Debug("Lottery:赔付成功", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", p), zap.Any("返奖值", award))
+	zap.L().Debug("Lottery:赔付成功", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("可赔付", controlledLimit), zap.Any("返奖值", award))
 
 	CacheIns().ChangePoolWithNoLock(agent, user, game, currencyType, roundId, bet, award, revence)
 

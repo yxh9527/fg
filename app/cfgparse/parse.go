@@ -3,27 +3,44 @@ package cfgparse
 import (
 	"app/config"
 	"app/esindex"
+	"strings"
 
 	jsoniter "github.com/json-iterator/go"
 	"go.uber.org/zap"
 )
 
-// Parse 解析 Redis 配置 key（格式：/{Prefix}/config/... 或 /{Prefix}/agent/...）。
-// 分割后第一段必须等于 esindex.Prefix（代码常量，如 fg），否则视为其他服务配置，直接跳过。
+func splitConfigKey(key string) (section string, rest []string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", nil
+	}
+	if esindex.MatchKeyPrefix(key) {
+		return esindex.ParsePath(key)
+	}
+	arr := strings.Split(strings.Trim(key, "/"), "/")
+	if len(arr) == 0 {
+		return "", nil
+	}
+	if arr[0] == "config" || arr[0] == "agent" {
+		return arr[0], arr[1:]
+	}
+	return "", nil
+}
+
+// Parse 解析 Redis 配置 key。
+// 兼容 /{Prefix}/config/... 与 wgs 旧格式 /config/... 、 /agent/... 。
 func Parse(key string, value string) {
+	if config.CfgIns == nil {
+		zap.L().Error("配置实例未初始化", zap.Any("key", key))
+		return
+	}
 	if value == "" {
 		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
 		return
 	}
-	if !esindex.MatchKeyPrefix(key) {
-		zap.L().Debug("skip config: prefix mismatch",
-			zap.String("key", key),
-			zap.String("expectPrefix", esindex.Prefix))
-		return
-	}
-	section, rest := esindex.ParsePath(key)
+	section, rest := splitConfigKey(key)
 	if section == "" {
-		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
+		zap.L().Debug("skip config: unrecognized key", zap.String("key", key))
 		return
 	}
 	switch section {
@@ -55,12 +72,8 @@ func Parse(key string, value string) {
 			}
 			tmp := &config.Pool{}
 			if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
-				zap.L().Debug("加载pool配置文件成功", zap.Any("data", tmp))
-				symbol := rest[1]
-				if tmp.Symbol != "" {
-					symbol = tmp.Symbol
-				}
-				config.CfgIns.SetDefaultPool(symbol, tmp)
+				zap.L().Debug("加载pool配置文件成功", zap.Any("data", tmp), zap.String("symbol", rest[1]))
+				config.CfgIns.SetDefaultPool(rest[1], tmp)
 			} else {
 				zap.L().Error("加载pool配置失败", zap.Any("err", err))
 			}
@@ -75,11 +88,7 @@ func Parse(key string, value string) {
 					zap.L().Debug("ctrl 配置异常", zap.Any("data", tmp))
 					return
 				}
-				symbol := rest[1]
-				if tmp.Symbol != "" {
-					symbol = tmp.Symbol
-				}
-				config.CfgIns.SetCtrl(symbol, tmp)
+				config.CfgIns.SetCtrl(rest[1], tmp)
 			} else {
 				zap.L().Error("加载ctrl配置失败", zap.Any("err", err))
 			}
@@ -90,7 +99,6 @@ func Parse(key string, value string) {
 			if err := jsoniter.UnmarshalFromString(value, &tmp.Ctrls); err == nil {
 				config.CfgIns.SetAutoCtrl(tmp)
 			} else {
-				// 兼容整对象反序列化
 				tmp2 := &config.AutoCtrlMgr{}
 				if err2 := jsoniter.UnmarshalFromString(value, tmp2); err2 == nil {
 					config.CfgIns.SetAutoCtrl(tmp2)
@@ -98,9 +106,16 @@ func Parse(key string, value string) {
 					zap.L().Error("加载autoCtrl配置失败", zap.Any("err", err))
 				}
 			}
+		case "controlCoefficient":
+			tmp := config.DefaultControlCoefficientConfig()
+			if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
+				config.CfgIns.SetControlCoefficient(tmp)
+				zap.L().Debug("加载controlCoefficient配置成功", zap.Any("data", tmp))
+			} else {
+				zap.L().Error("加载控制系数配置失败", zap.Any("err", err), zap.Any("value", value))
+			}
 		}
 	case "agent":
-		// /fg/agent/{agentId}/pool/{symbol}
 		if len(rest) >= 3 && rest[1] == "pool" {
 			tmp := &config.Pool{}
 			if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {

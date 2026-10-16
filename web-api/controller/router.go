@@ -174,6 +174,7 @@ func NewRouter() *gin.Engine {
 	Register(g, "post", "/api/auth/v2/game/apiConfigDel", v2.ApiConfigDel, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/game/apiConfigUpdate", v2.ApiConfigUpdate, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/govern/user", v2.GovernUser, []ACCOUNT_TYPE{M})
+	Register(g, "put", "/api/auth/v2/govern/user", v2.GovernUser, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/govern/edit", v2.PoolEdit, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/game/getGameCurrency", v2.GameCurrencys, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/game/changeStatus", v2.ChangeStatus, []ACCOUNT_TYPE{M})
@@ -181,6 +182,8 @@ func NewRouter() *gin.Engine {
 	Register(g, "post", "/api/auth/v2/user/getAutoSingleControl", v2.GetSingleCtrlConfig, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/game/getGameSettingData", v2.GetGameSettingData, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/game/saveGameSettingData", v2.SaveGameSettingData, []ACCOUNT_TYPE{M})
+	Register(g, "post", "/api/auth/v2/game/getControlCoefficientData", v2.GetControlCoefficientData, []ACCOUNT_TYPE{M})
+	Register(g, "post", "/api/auth/v2/game/saveControlCoefficientData", v2.SaveControlCoefficientData, []ACCOUNT_TYPE{M})
 	Register(g, "post", "/api/auth/v2/game/syncAllPool", v2.SyncAllPool, []ACCOUNT_TYPE{M})
 	return engine
 }
