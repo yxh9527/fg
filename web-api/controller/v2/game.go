@@ -451,11 +451,7 @@ func GetControlCoefficientData(ctx *gin.Context) {
 	key := esindex.ConfigKey("controlCoefficient")
 	str, err := dao.RedisIns().Get(key)
 	if err != nil || str == "" {
-		if raw, err2 := dao.RedisIns().Get("/config/controlCoefficient"); err2 == nil && raw != "" {
-			str = raw
-		} else {
-			str, _ = jsoniter.MarshalToString(config.DefaultControlCoefficientConfig())
-		}
+		str, _ = jsoniter.MarshalToString(config.DefaultControlCoefficientConfig())
 	}
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: str})
 }

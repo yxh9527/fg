@@ -3,32 +3,13 @@ package cfgparse
 import (
 	"app/config"
 	"app/esindex"
-	"strings"
 
 	jsoniter "github.com/json-iterator/go"
 	"go.uber.org/zap"
 )
 
-func splitConfigKey(key string) (section string, rest []string) {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return "", nil
-	}
-	if esindex.MatchKeyPrefix(key) {
-		return esindex.ParsePath(key)
-	}
-	arr := strings.Split(strings.Trim(key, "/"), "/")
-	if len(arr) == 0 {
-		return "", nil
-	}
-	if arr[0] == "config" || arr[0] == "agent" {
-		return arr[0], arr[1:]
-	}
-	return "", nil
-}
-
-// Parse 解析 Redis 配置 key。
-// 兼容 /{Prefix}/config/... 与 wgs 旧格式 /config/... 、 /agent/... 。
+// Parse 解析 Redis 配置 key（格式：/{Prefix}/config/... 或 /{Prefix}/agent/...）。
+// 分割后第一段必须等于 esindex.Prefix（代码常量，如 fg），否则视为其他服务配置，直接跳过。
 func Parse(key string, value string) {
 	if config.CfgIns == nil {
 		zap.L().Error("配置实例未初始化", zap.Any("key", key))
@@ -38,9 +19,15 @@ func Parse(key string, value string) {
 		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
 		return
 	}
-	section, rest := splitConfigKey(key)
+	if !esindex.MatchKeyPrefix(key) {
+		zap.L().Debug("skip config: prefix mismatch",
+			zap.String("key", key),
+			zap.String("expectPrefix", esindex.Prefix))
+		return
+	}
+	section, rest := esindex.ParsePath(key)
 	if section == "" {
-		zap.L().Debug("skip config: unrecognized key", zap.String("key", key))
+		zap.L().Error("配置数据异常", zap.Any("key", key), zap.Any("data", value))
 		return
 	}
 	switch section {

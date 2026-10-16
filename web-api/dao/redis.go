@@ -426,10 +426,8 @@ func ConfigsInit() {
 		}
 		//加载默认配置
 		LoadConfigs(RedisIns(), esindex.ConfigPattern())
-		LoadConfigs(RedisIns(), "/config/*")
 		//加载代理配置
 		LoadConfigs(RedisIns(), esindex.AgentPattern())
-		LoadConfigs(RedisIns(), "/agent/*")
 	}
 }
 
