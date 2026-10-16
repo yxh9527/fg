@@ -305,24 +305,40 @@ func (cfg *Configs) GetControlCoefficient(averageBet, effectBet, profitLoss, rou
 func (cfg *Configs) GetPoolCfg(agentId int64, symbol string) *Pool {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
-	p := cfg.Pool.Agent[fmt.Sprintf("%d_%s", agentId, symbol)]
-	if p == nil {
-		return cfg.Pool.Default[symbol]
+	if cfg.Pool == nil {
+		return nil
 	}
-	return p
+	if p := cfg.Pool.Agent[fmt.Sprintf("%d-%s", agentId, symbol)]; p != nil {
+		return p
+	}
+	if p := cfg.Pool.Agent[fmt.Sprintf("%d_%s", agentId, symbol)]; p != nil {
+		return p
+	}
+	return cfg.Pool.Default[symbol]
+}
+
+func (cfg *Configs) GetPoolDefaultCfg(symbol string) *Pool {
+	cfg.Lock.RLock()
+	defer cfg.Lock.RUnlock()
+	if cfg.Pool == nil {
+		return nil
+	}
+	return cfg.Pool.Default[symbol]
 }
 
 func (cfg *Configs) GetPoolCfgByGameId(agentId, gameId int64) *Pool {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
-
+	if cfg.Pool == nil {
+		return nil
+	}
 	for _, c := range cfg.Pool.Agent {
-		if c.GameId == gameId {
+		if c != nil && c.GameId == gameId {
 			return c
 		}
 	}
 	for _, c := range cfg.Pool.Default {
-		if c.GameId == gameId {
+		if c != nil && c.GameId == gameId {
 			return c
 		}
 	}
@@ -332,8 +348,11 @@ func (cfg *Configs) GetPoolCfgByGameId(agentId, gameId int64) *Pool {
 func (cfg *Configs) GetPoolDefaultCfgByGameId(gameId int64) *Pool {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
+	if cfg.Pool == nil {
+		return nil
+	}
 	for _, c := range cfg.Pool.Default {
-		if c.GameId == gameId {
+		if c != nil && c.GameId == gameId {
 			return c
 		}
 	}

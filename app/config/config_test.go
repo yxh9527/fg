@@ -93,15 +93,22 @@ func TestGetControlCoefficientSingleTable(t *testing.T) {
 	}
 }
 
-func TestGetPoolCfgAgentKey(t *testing.T) {
+func TestGetPoolCfgBySymbol(t *testing.T) {
 	cfg := newTestCfg()
-	agentPool := &Pool{Symbol: "slot"}
-	defaultPool := &Pool{Symbol: "slot"}
+	azteke := &Pool{Symbol: "azteke", GameId: 2006, NameZH: "阿兹特克"}
+	dzpk := &Pool{Symbol: "dzpk", GameId: 2006, NameZH: "德州扑克"}
+	cfg.SetDefaultPool("azteke", azteke)
+	cfg.SetDefaultPool("dzpk", dzpk)
+	if got := cfg.GetPoolDefaultCfg("azteke"); got != azteke {
+		t.Fatalf("azteke should return its own pool")
+	}
+	if got := cfg.GetPoolCfg(1, "azteke"); got != azteke {
+		t.Fatalf("missing agent pool should fall back to azteke default")
+	}
+	agentPool := &Pool{Symbol: "azteke", GameId: 2006}
 	cfg.SetAgentPool("12", agentPool)
-	cfg.SetDefaultPool("slot", defaultPool)
-	got := cfg.GetPoolCfg(12, "slot")
-	if got != defaultPool {
-		t.Fatalf("wgs lottery looks up agent with underscore, should fall back to default")
+	if got := cfg.GetPoolCfg(12, "azteke"); got != agentPool {
+		t.Fatalf("agent pool should be found by id-symbol")
 	}
 }
 
