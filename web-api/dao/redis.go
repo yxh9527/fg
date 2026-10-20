@@ -356,6 +356,9 @@ func LoadConfigs(client *RedisDao, prefix string) {
 	keys := make([]string, 0, 256)
 	for iter.Next(context.Background()) {
 		k := iter.Val()
+		if !esindex.MatchKeyPrefix(k) {
+			continue
+		}
 		keys = append(keys, k)
 	}
 	if err := iter.Err(); err != nil {

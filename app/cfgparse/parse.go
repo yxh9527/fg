@@ -59,6 +59,7 @@ func Parse(key string, value string) {
 			}
 			tmp := &config.Pool{}
 			if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
+				tmp.Symbol = rest[1]
 				zap.L().Debug("加载pool配置文件成功", zap.Any("data", tmp), zap.String("symbol", rest[1]))
 				config.CfgIns.SetDefaultPool(rest[1], tmp)
 			} else {
@@ -106,6 +107,7 @@ func Parse(key string, value string) {
 		if len(rest) >= 3 && rest[1] == "pool" {
 			tmp := &config.Pool{}
 			if err := jsoniter.UnmarshalFromString(value, tmp); err == nil {
+				tmp.Symbol = rest[2]
 				config.CfgIns.SetAgentPool(rest[0], tmp)
 			} else {
 				zap.L().Error("加载代理pool配置失败", zap.Any("err", err))
