@@ -74,7 +74,7 @@ type settleRecord struct {
 	UserId       uint32
 	GameId       uint32
 	Win          string
-	RoundID      string
+	RecordID     string // 玩家注单号；房间 roundId 只用于整局结算幂等。
 	Log          string
 	Bet          string
 	CurrencyType string

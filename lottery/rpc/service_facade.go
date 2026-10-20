@@ -742,6 +742,26 @@ func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.Fru
 	return resp, nil
 }
 
+// fruitSettleRecordID 只解析百人玩家记录：其注单号独立于房间 roundId，不能复用单人结算的相等校验。
+func fruitSettleRecordID(req *services.FruitSettleRoundReq, player *services.FruitSettlePlayer) (string, bool) {
+	var record struct {
+		RecordID       string  `json:"recordId"`
+		UserId         uint32  `json:"userId"`
+		AgentId        *uint32 `json:"agentId"`
+		GameId         uint32  `json:"gameId"`
+		CurrencySymbol string  `json:"currencySymbol"`
+	}
+	if err := jsoniter.UnmarshalFromString(player.RecordJson, &record); err != nil {
+		return "", false
+	}
+	if strings.TrimSpace(record.RecordID) == "" || record.RecordID != strings.TrimSpace(record.RecordID) ||
+		record.UserId != player.UserId || record.GameId != req.GameId || record.CurrencySymbol != req.CurrencyType ||
+		(record.AgentId != nil && *record.AgentId != req.AgentId) {
+		return "", false
+	}
+	return record.RecordID, true
+}
+
 // FruitSettleRound 百人整局结算门面。
 // 规则 A：复用 doMultiSettle（只入账 winAmount；totalBet 只用于记录）。
 func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.FruitSettleRoundReq) (resp *services.FruitSettleRoundResp, err error) {
@@ -763,6 +783,7 @@ func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.Fru
 	records := make([]*settleRecord, 0, len(req.Players))
 	totalWin := decimal.Zero
 	seen := make(map[uint32]struct{}, len(req.Players))
+	seenRecords := make(map[string]struct{}, len(req.Players))
 	for _, p := range req.Players {
 		if p == nil || p.UserId == 0 {
 			return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
@@ -783,16 +804,21 @@ func (d *LotteryService) FruitSettleRound(ctx context.Context, req *services.Fru
 		if !betOK || bet.IsNegative() {
 			return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
 		}
-		if strings.TrimSpace(p.RecordJson) == "" {
+		recordId, recordOK := fruitSettleRecordID(req, p)
+		if !recordOK {
 			return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
 		}
+		if _, duplicate := seenRecords[recordId]; duplicate {
+			return failFruitSettleRound(resp, services.ErrorCode_PARAMS_INVALID)
+		}
+		seenRecords[recordId] = struct{}{}
 		totalWin = totalWin.Add(win)
 
 		records = append(records, &settleRecord{
 			UserId:       p.UserId,
 			GameId:       req.GameId,
 			Win:          win.String(),
-			RoundID:      req.RoundId,
+			RecordID:     recordId,
 			Log:          p.RecordJson,
 			Bet:          bet.String(),
 			CurrencyType: req.CurrencyType,

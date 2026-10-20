@@ -1094,8 +1094,7 @@ func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleRe
 		awards[item.UserId] = win.Mul(decimal.NewFromInt(100)).IntPart()
 		balances[item.UserId] = balance
 		if user.IsTourist == 0 {
-			roundId := fmt.Sprintf("%s#%d", item.RoundID, item.UserId)
-			records = append(records, ConvertRecord(item.AgentId, item.UserId, roundId, item.CurrencyType, game.ConfName,
+			records = append(records, ConvertRecord(item.AgentId, item.UserId, item.RecordID, item.CurrencyType, game.ConfName,
 				item.Account, item.Log, currencyFromCent(balance), uint32(agent.WebId), bet.InexactFloat64(), win.InexactFloat64()))
 		}
 	}
@@ -1131,7 +1130,7 @@ func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleRe
 		dao.CacheIns().Complete(int64(item.AgentId), item.UserId, game.ConfName, bet.Mul(exchange), win.Mul(exchange), decimal.Zero)
 		if !bet.IsZero() || !win.IsZero() {
 			d.SaveBill(item.AgentId, item.UserId, bet.Neg(), win, currencyFromCent(balances[item.UserId]).InexactFloat64(),
-				game.ConfName, "结算", item.CurrencyType, fmt.Sprintf("%s#%d", item.RoundID, item.UserId))
+				game.ConfName, "结算", item.CurrencyType, item.RecordID)
 		}
 	}
 	resp.Code = services.ErrorCode_OK
