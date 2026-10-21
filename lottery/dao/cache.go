@@ -463,10 +463,12 @@ func (gcm *GameCacheMgr) CheckPoolWithChange(agentId int64, symbol, recordId, cu
 	defer agent.lock.Unlock()
 
 	game := agent.GetGame(symbol)
-	//水池计算方式  pool = 有效投注 - 总赔付 - 税收 + Base；预判只扣正赔付
+	//水池计算方式  pool = 有效投注 - 总赔付 - 税收 + Base；预判只扣正赔付。
+	// 与本地 fruitsRpcDev.pool.settle 对齐：next = 当前池 + bet - win，仅 next<0 才拒绝。
+	// 返奖不超过下注时本局净增加，必须入池，不能因当前水位或抽水把池打到 0 而拒单。
 	payout := positiveAward(award)
 	pool := (game.TotalEffectBet.Add(bet).Sub(game.TotalProfLoss.Add(payout))).Sub(game.TotalRevenue.Add(revenue)).Add(poolCfgBase(agentId, symbol))
-	if pool.LessThanOrEqual(decimal.Zero) {
+	if payout.GreaterThan(bet) && pool.LessThan(decimal.Zero) {
 		return false
 	}
 	user := agent.GetUser(uint32(userId))
