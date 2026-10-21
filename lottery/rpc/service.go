@@ -977,11 +977,31 @@ func (d *LotteryService) doSingleBet(req *singleBetReq) (resp *singleBetResp, er
 	return resp, nil
 }
 
-// doMultiBet 百人下注只扣余额，不修改水池。
+// doMultiBet 百人下注扣款后立即计入代理水池，后续退款或派奖分别撤销下注、扣减赔付。
 func (d *LotteryService) doMultiBet(req *multiBetReq) (resp *multiBetResp, err error) {
 	resp = &multiBetResp{Code: services.ErrorCode_SYSTEM_ERROR}
 	bet, ok := parseAmountStrict(req.InitBet)
 	if !ok || bet.IsNegative() {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		return resp, nil
+	}
+	game := dao.GamesManagerIns().GetById(int64(req.GameId))
+	agent := dao.AgentManagerIns().Get(int64(req.AgentId))
+	if agent == nil && req.AgentId == 0 {
+		agent = &manager.Agent{Id: 0, WebId: 0}
+	}
+	if game == nil || agent == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		return resp, nil
+	}
+	exchange, exchangeOK := config.CfgIns.GetExchange(req.CurrencyType)
+	poolCfg := config.CfgIns.GetPoolCfg(int64(req.AgentId), game.ConfName)
+	if !exchangeOK || poolCfg == nil || poolCfg.Pool == nil || poolCfg.Pool[1] == nil {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		return resp, nil
+	}
+	user := dao.CacheIns().GetUser(int64(req.AgentId), int64(req.UserId))
+	if user == nil {
 		resp.Code = services.ErrorCode_PARAMS_INVALID
 		return resp, nil
 	}
@@ -1003,16 +1023,43 @@ func (d *LotteryService) doMultiBet(req *multiBetReq) (resp *multiBetResp, err e
 			return resp, nil
 		}
 	}
+	if bet.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
+		if !dao.CacheIns().ChangePool(int64(req.AgentId), int32(req.UserId), game.ConfName,
+			req.CurrencyType, req.RoundID, bet.Mul(exchange), decimal.Zero, poolCfg.Pool[1].Revenue) {
+			if _, rollbackCode := d.updatePlayerCurrency(req.UserId, betCents); rollbackCode != services.ErrorCode_OK {
+				zap.L().Error("doMultiBet rollback balance failed", zap.Uint32("userId", req.UserId), zap.Any("code", rollbackCode))
+			}
+			resp.Code = services.ErrorCode_SYSTEM_ERROR
+			return resp, nil
+		}
+		d.pcr.Record(int64(req.AgentId), game.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), game.ConfName))
+	}
 	resp.Code = services.ErrorCode_OK
 	resp.Currency = currencyFromCent(balance).Truncate(2).String()
 	return resp, nil
 }
 
-// doMultiRefund 百人撤注只退余额，不回退水池。
+// doMultiRefund 百人撤注退款后撤销下注时增加的有效投注和税额。
 func (d *LotteryService) doMultiRefund(req *multiRefundReq) (resp *multiRefundResp, err error) {
 	resp = &multiRefundResp{Code: services.ErrorCode_SYSTEM_ERROR}
 	bet, ok := parseAmountStrict(req.Bet)
 	if !ok || bet.IsNegative() {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		return resp, nil
+	}
+	game := dao.GamesManagerIns().GetById(int64(req.GameId))
+	if game == nil {
+		resp.Code = services.ErrorCode_PARAMS_INVALID
+		return resp, nil
+	}
+	exchange, exchangeOK := config.CfgIns.GetExchange(req.CurrencyType)
+	poolCfg := config.CfgIns.GetPoolCfg(int64(req.AgentId), game.ConfName)
+	if !exchangeOK || poolCfg == nil || poolCfg.Pool == nil || poolCfg.Pool[1] == nil {
+		resp.Code = services.ErrorCode_SYSTEM_ERROR
+		return resp, nil
+	}
+	user := dao.CacheIns().GetUser(int64(req.AgentId), int64(req.UserId))
+	if user == nil {
 		resp.Code = services.ErrorCode_PARAMS_INVALID
 		return resp, nil
 	}
@@ -1029,24 +1076,40 @@ func (d *LotteryService) doMultiRefund(req *multiRefundReq) (resp *multiRefundRe
 			return resp, nil
 		}
 	}
+	if bet.GreaterThan(decimal.Zero) && user.IsTourist == 0 {
+		d.rollbackPoolChange(req.AgentId, req.UserId, game.ConfName, req.CurrencyType, req.RoundID,
+			bet.Mul(exchange), decimal.Zero, poolCfg.Pool[1].Revenue)
+		d.pcr.Record(int64(req.AgentId), game.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), game.ConfName))
+	}
 	resp.Code = services.ErrorCode_OK
 	resp.Currency = currencyFromCent(balance).Truncate(2).String()
 	return resp, nil
 }
 
-// doMultiSettle 整期只派奖 win，不返还 totalBet、不检查或修改水池；全批校验后入账，失败撤销已派奖余额。
+// doMultiSettle 整期只派奖 win；投注已在下注时入池，此处扣除派奖并在失败时一并回滚。
 func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleResp, err error) {
 	resp = &multiSettleResp{Code: services.ErrorCode_SYSTEM_ERROR, Currencys: make([]*newCurrencyItem, 0)}
 	awards := make(map[uint32]int64, len(req.Records))
 	balances := make(map[uint32]int64, len(req.Records))
 	records := make([]*entity.CacheRecordsReq, 0, len(req.Records))
 	applied := make(map[uint32]int64, len(req.Records))
+	type poolPayout struct {
+		item   *settleRecord
+		symbol string
+		amount decimal.Decimal
+	}
+	poolPayouts := make([]poolPayout, 0, len(req.Records))
+	appliedPoolPayouts := make([]poolPayout, 0, len(req.Records))
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			zap.L().Error("doMultiSettle panic", zap.Any("err", recovered))
 			resp.Code = services.ErrorCode_SYSTEM_ERROR
 		}
 		if resp.Code != services.ErrorCode_OK {
+			for _, payout := range appliedPoolPayouts {
+				d.rollbackPoolChange(payout.item.AgentId, payout.item.UserId, payout.symbol,
+					payout.item.CurrencyType, payout.item.RecordID, decimal.Zero, payout.amount, decimal.Zero)
+			}
 			for userId, delta := range applied {
 				if _, rollbackCode := d.updatePlayerCurrency(userId, -delta); rollbackCode != services.ErrorCode_OK {
 					zap.L().Error("doMultiSettle 回滚余额失败", zap.Uint32("userId", userId), zap.Any("code", rollbackCode))
@@ -1075,7 +1138,8 @@ func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleRe
 			resp.Code = services.ErrorCode_PARAMS_INVALID
 			return resp, nil
 		}
-		if _, ok := config.CfgIns.GetExchange(item.CurrencyType); !ok {
+		exchange, exchangeOK := config.CfgIns.GetExchange(item.CurrencyType)
+		if !exchangeOK {
 			return resp, nil
 		}
 		if config.CfgIns.GetPoolCfg(int64(item.AgentId), game.ConfName) == nil {
@@ -1096,7 +1160,20 @@ func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleRe
 		if user.IsTourist == 0 {
 			records = append(records, ConvertRecord(item.AgentId, item.UserId, item.RecordID, item.CurrencyType, game.ConfName,
 				item.Account, item.Log, currencyFromCent(balance), uint32(agent.WebId), bet.InexactFloat64(), win.InexactFloat64()))
+			if win.GreaterThan(decimal.Zero) {
+				poolPayouts = append(poolPayouts, poolPayout{
+					item: item, symbol: game.ConfName, amount: win.Mul(exchange),
+				})
+			}
 		}
+	}
+	for _, payout := range poolPayouts {
+		if !dao.CacheIns().ChangePool(int64(payout.item.AgentId), int32(payout.item.UserId), payout.symbol,
+			payout.item.CurrencyType, payout.item.RecordID, decimal.Zero, payout.amount, decimal.Zero) {
+			resp.Code = services.ErrorCode_NO_ENOUGH_POOL_MONEY
+			return resp, nil
+		}
+		appliedPoolPayouts = append(appliedPoolPayouts, payout)
 	}
 	for _, item := range req.Records {
 		delta := awards[item.UserId]

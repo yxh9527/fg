@@ -605,7 +605,7 @@ func (d *LotteryService) FruitDoBet(ctx context.Context, req *services.FruitDoBe
 }
 
 // FruitDoBetMulti 百人扣款门面。
-// 规则 A：复用 doMultiBet（只扣余额，不改水池）。
+// 下注成功时由 doMultiBet 同步更新玩家余额和代理水池。
 // 每次调用都是一次独立加注；roundId 常为 mp-{gameId}-{userId}，不能按局号做完成态幂等。
 func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.FruitDoBetMultiReq) (resp *services.FruitDoBetMultiResp, err error) {
 	resp = &services.FruitDoBetMultiResp{Code: services.ErrorCode_OK, Ret: false}
@@ -675,7 +675,7 @@ func (d *LotteryService) FruitDoBetMulti(ctx context.Context, req *services.Frui
 }
 
 // FruitRefundMulti 百人退款门面。
-// 规则 A：复用 doMultiRefund（只退余额，不改水池）。
+// 退款成功时由 doMultiRefund 同步退回余额并撤销对应的水池投注。
 // 与加注一样按次独立退款，不做 roundId 完成态幂等。
 func (d *LotteryService) FruitRefundMulti(ctx context.Context, req *services.FruitRefundMultiReq) (resp *services.FruitRefundMultiResp, err error) {
 	resp = &services.FruitRefundMultiResp{Code: services.ErrorCode_OK, Ret: false}
