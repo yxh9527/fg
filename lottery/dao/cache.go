@@ -621,6 +621,15 @@ func (gcm *GameCacheMgr) Lottery(agentId int64, userId int32, pc *config.Pool, s
 
 	revence := bet.Mul(pc.Pool[1].Revenue).Truncate(4)
 	pool := (bet.Add(game.TotalEffectBet).Sub(game.TotalProfLoss)).Sub(game.TotalRevenue.Add(revence)).Add(pc.Pool[1].Base)
+	// 返奖不超过下注时本局水池净增加，必须把投注入池；不能因当前水位拒单。
+	if !award.GreaterThan(bet) {
+		if ac := config.CfgIns.GetAutoCtrl(user.TotalEffectBet, user.TotalProfLoss); ac != nil {
+			zap.L().Debug("Lottery:自动控制", zap.Any("agentId", agentId), zap.Any("symbol", symbol), zap.Any("roundId", roundId), zap.Any("playerId", userId), zap.Any("ac", ac))
+			SCIns().addSingleCtrl(uint32(userId), ac.ControlRate, ac.Score, AUTO_CTRL)
+		}
+		CacheIns().ChangePoolWithNoLock(agent, user, game, currencyType, roundId, bet, award, revence)
+		return pool, true
+	}
 	//判断pool等级
 	t, r := gcm.poolType(pool, pc)
 	//计算可赔付值

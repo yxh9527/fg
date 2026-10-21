@@ -98,9 +98,20 @@ func UpdateGameUrl(ctx *gin.Context) {
 	sys.Replays = rs
 	zap.L().Debug("获取系统配置", zap.Any("sys", sys))
 	r, _ := jsoniter.MarshalToString(sys)
-	dao.RedisIns().Set(esindex.ConfigKey("system"), r, -1)
+	systemKey := esindex.ConfigKey("system")
+	if err = dao.UpsertPoolConfig(systemKey, r); err != nil {
+		zap.L().Error("保存客户端地址到数据库失败", zap.Any("err", err))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Data: nil, Msg: "失败"})
+		return
+	}
+	if err = dao.RedisIns().Set(systemKey, r, -1); err != nil {
+		zap.L().Error("保存客户端地址到Redis失败", zap.Any("err", err))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Data: nil, Msg: "失败"})
+		return
+	}
+	dao.ParseConfig(systemKey, r)
 	dataStr, _ := jsoniter.MarshalToString(map[string]interface{}{
-		"key":  esindex.ConfigKey("system"),
+		"key":  systemKey,
 		"data": r,
 	})
 	str, _ := jsoniter.MarshalToString(map[string]interface{}{
