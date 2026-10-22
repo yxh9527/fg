@@ -92,7 +92,6 @@ func (d *LotteryService) Luck5Deal(ctx context.Context, req *services.Luck5DealR
 		if agent == nil {
 			return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidAgent"}, nil
 		}
-		round.WebId = uint32(agent.WebId)
 	}
 	exchange, ok := config.CfgIns.GetExchange(req.CurrencyType)
 	pool := config.CfgIns.GetPoolCfg(int64(req.AgentId), eGame.ConfName)
@@ -109,6 +108,8 @@ func (d *LotteryService) Luck5Deal(ctx context.Context, req *services.Luck5DealR
 	if player == nil || player.AgentId != req.AgentId || player.CurrencyType != req.CurrencyType {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "playerIdentityMismatch"}, nil
 	}
+	// 测试代理 agentId=0 不在代理表，站点从玩家 website_id 写入注单。
+	round.WebId = player.WebSiteId
 	round.Symbol, round.Exchange, round.GameName = eGame.ConfName, exchange, pool.Name
 	round.RevenueRate = pool.Pool[1].Revenue
 	resp, err := dao.CacheIns().Luck5Deal(ctx, round)

@@ -117,7 +117,7 @@ func TestLuck5RecordSavesRevenue(t *testing.T) {
 	defer client.Stop()
 	service := &LotteryService{es: dao.NewESDao(client)}
 	round := &dao.Luck5Round{
-		UserId: 279, GameId: 7012, CurrencyType: "USD", RoundId: "round",
+		UserId: 279, AgentId: 0, WebId: 23, GameId: 7012, CurrencyType: "USD", RoundId: "round",
 		BetCent: 1000, WinCent: 40000, Balance: 139000, Symbol: "lucky",
 		Exchange: decimal.NewFromInt(7), RevenueRate: decimal.RequireFromString("0.03"),
 		Revenue:    decimal.RequireFromString("2.1"),
@@ -128,5 +128,8 @@ func TestLuck5RecordSavesRevenue(t *testing.T) {
 	}
 	if body["revenue"] != 0.3 || body["exRevenue"] != 2.1 {
 		t.Fatalf("tax missing from record: %#v", body)
+	}
+	if body["webId"] != float64(23) || body["agentId"] != float64(0) {
+		t.Fatalf("webId missing from record: %#v", body)
 	}
 }
