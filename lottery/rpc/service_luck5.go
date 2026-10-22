@@ -173,6 +173,7 @@ func (d *LotteryService) saveLuck5Record(ctx context.Context, round *dao.Luck5Ro
 	bet := decimal.NewFromInt(round.BetCent).Shift(-2)
 	win := decimal.NewFromInt(round.WinCent).Shift(-2)
 	balance := decimal.NewFromInt(round.Balance).Shift(-2)
+	revenue := bet.Mul(round.RevenueRate).Truncate(4)
 	var payload struct {
 		CreatedAtMs int64 `json:"createdAtMs"`
 	}
@@ -192,6 +193,7 @@ func (d *LotteryService) saveLuck5Record(ctx context.Context, round *dao.Luck5Ro
 		Chips:      decimal.Max(bet, win).Mul(round.Exchange).InexactFloat64(),
 		PlayedDate: payload.CreatedAtMs, RowVersion: payload.CreatedAtMs * 1000000,
 		RoundID: round.RoundId, Symbol: round.Symbol, GameName: round.GameName,
+		Revenue: revenue.InexactFloat64(), ExRevenue: round.Revenue.InexactFloat64(),
 		Log: round.RecordJson, Hash: fmt.Sprintf("%x", hash), Complete: true, IsTourist: round.IsTourist,
 	}
 	saveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)

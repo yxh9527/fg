@@ -88,3 +88,32 @@ func TestLuck5RecordSaveReportsFailureAndUsesSameDocument(t *testing.T) {
 		t.Fatal("record retry changed document or payload")
 	}
 }
+
+func TestLuck5RecordSavesRevenue(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		json.NewDecoder(request.Body).Decode(&body)
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write([]byte(`{"_index":"test","_id":"record","_version":1,"result":"created"}`))
+	}))
+	defer server.Close()
+	client, err := elastic.NewClient(elastic.SetURL(server.URL), elastic.SetSniff(false), elastic.SetHealthcheck(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Stop()
+	service := &LotteryService{es: dao.NewESDao(client)}
+	round := &dao.Luck5Round{
+		UserId: 279, GameId: 7012, CurrencyType: "USD", RoundId: "round",
+		BetCent: 1000, WinCent: 40000, Balance: 139000, Symbol: "lucky",
+		Exchange: decimal.NewFromInt(7), RevenueRate: decimal.RequireFromString("0.03"),
+		Revenue:    decimal.RequireFromString("2.1"),
+		RecordJson: `{"recordId":"round","createdAtMs":1791874388273,"cards":[1,2,3,4,5]}`,
+	}
+	if err := service.saveLuck5Record(context.Background(), round); err != nil {
+		t.Fatal(err)
+	}
+	if body["revenue"] != 0.3 || body["exRevenue"] != 2.1 {
+		t.Fatalf("tax missing from record: %#v", body)
+	}
+}
