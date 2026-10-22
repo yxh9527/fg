@@ -211,6 +211,7 @@ message Luck5SettleReq {
     string roundId = 5;
     string winAmount = 6;
     string recordJson = 7;
+    string attemptId = 8;
 }
 
 message Luck5Resp {

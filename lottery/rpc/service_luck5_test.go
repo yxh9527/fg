@@ -29,7 +29,7 @@ func TestLuck5AmountsAreExactCents(t *testing.T) {
 }
 
 func TestLuck5RecordIdentityAndTimestamp(t *testing.T) {
-	req := &services.Luck5SettleReq{UserId: 279, AgentId: 0, GameId: 7012, CurrencyType: "CNY", RoundId: "round", RecordJson: `{"recordId":"round","userId":279,"gameId":7012,"currencySymbol":"CNY","createdAtMs":1791874388273}`}
+	req := &services.Luck5SettleReq{UserId: 279, AgentId: 0, GameId: 7012, CurrencyType: "CNY", RoundId: "round", AttemptId: "attempt-1", RecordJson: `{"recordId":"round","userId":279,"gameId":7012,"currencySymbol":"CNY","createdAtMs":1791874388273}`}
 	if !validateLuck5Record(req) {
 		t.Fatal("valid record rejected")
 	}
@@ -38,6 +38,17 @@ func TestLuck5RecordIdentityAndTimestamp(t *testing.T) {
 		if validateLuck5Record(req) {
 			t.Fatalf("accepted %s", record)
 		}
+	}
+}
+
+func TestLuck5SettleRequiresAttemptID(t *testing.T) {
+	req := &services.Luck5SettleReq{UserId: 279, GameId: 7012, CurrencyType: "CNY", RoundId: "round", WinAmount: "0.00", RecordJson: `{"recordId":"round","userId":279,"gameId":7012,"currencySymbol":"CNY","createdAtMs":1}`}
+	if validateLuck5SettleRequest(req) {
+		t.Fatal("accepted settle without attemptId")
+	}
+	req.AttemptId = "attempt-1"
+	if !validateLuck5SettleRequest(req) {
+		t.Fatal("rejected settle with attemptId")
 	}
 }
 

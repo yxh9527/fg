@@ -1662,6 +1662,7 @@ type Luck5SettleReq struct {
 	RoundId       string                 `protobuf:"bytes,5,opt,name=roundId,proto3" json:"roundId,omitempty"`
 	WinAmount     string                 `protobuf:"bytes,6,opt,name=winAmount,proto3" json:"winAmount,omitempty"`
 	RecordJson    string                 `protobuf:"bytes,7,opt,name=recordJson,proto3" json:"recordJson,omitempty"`
+	AttemptId     string                 `protobuf:"bytes,8,opt,name=attemptId,proto3" json:"attemptId,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1741,6 +1742,13 @@ func (x *Luck5SettleReq) GetWinAmount() string {
 func (x *Luck5SettleReq) GetRecordJson() string {
 	if x != nil {
 		return x.RecordJson
+	}
+	return ""
+}
+
+func (x *Luck5SettleReq) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
 	}
 	return ""
 }
@@ -2578,7 +2586,7 @@ const file_lottery_proto_rawDesc = "" +
 	"\fcurrencyType\x18\x04 \x01(\tR\fcurrencyType\x12\x18\n" +
 	"\aroundId\x18\x05 \x01(\tR\aroundId\x12\x1c\n" +
 	"\tbetAmount\x18\x06 \x01(\tR\tbetAmount\x12$\n" +
-	"\rreserveAmount\x18\a \x01(\tR\rreserveAmount\"\xd6\x01\n" +
+	"\rreserveAmount\x18\a \x01(\tR\rreserveAmount\"\xf4\x01\n" +
 	"\x0eLuck5SettleReq\x12\x16\n" +
 	"\x06userId\x18\x01 \x01(\rR\x06userId\x12\x18\n" +
 	"\aagentId\x18\x02 \x01(\rR\aagentId\x12\x16\n" +
@@ -2588,7 +2596,8 @@ const file_lottery_proto_rawDesc = "" +
 	"\twinAmount\x18\x06 \x01(\tR\twinAmount\x12\x1e\n" +
 	"\n" +
 	"recordJson\x18\a \x01(\tR\n" +
-	"recordJson\"}\n" +
+	"recordJson\x12\x1c\n" +
+	"\tattemptId\x18\b \x01(\tR\tattemptId\"}\n" +
 	"\tLuck5Resp\x12$\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x10.base.error_codeR\x04code\x12\x10\n" +
 	"\x03ret\x18\x02 \x01(\bR\x03ret\x12\"\n" +

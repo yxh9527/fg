@@ -44,6 +44,10 @@ func validateLuck5Identity(round *dao.Luck5Round) bool {
 		strings.TrimSpace(round.CurrencyType) != ""
 }
 
+func luck5FundsLockKey(agentID, gameID uint32) string {
+	return buildIdempotencyKey("luck5FundsLock", u32Str(agentID), u32Str(gameID))
+}
+
 // 业务拒绝通过协议码返回，系统错误记录上下文但不暴露原始记录。
 func luck5Response(resp *services.Luck5Resp, err error, roundId string) (*services.Luck5Resp, error) {
 	if err != nil {
@@ -69,7 +73,7 @@ func (d *LotteryService) Luck5Deal(ctx context.Context, req *services.Luck5DealR
 	if !validateLuck5Identity(round) || !betOK || !reserveOK {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidDeal"}, nil
 	}
-	lockKey := buildIdempotencyKey("luck5Lock", req.RoundId)
+	lockKey := luck5FundsLockKey(req.AgentId, req.GameId)
 	if code := d.beginMultiOpLock(lockKey); code != services.ErrorCode_OK {
 		return &services.Luck5Resp{Code: code, Error: "roundBusy"}, nil
 	}
@@ -105,6 +109,7 @@ func (d *LotteryService) Luck5Deal(ctx context.Context, req *services.Luck5DealR
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "playerIdentityMismatch"}, nil
 	}
 	round.Symbol, round.Exchange, round.GameName = eGame.ConfName, exchange, pool.Name
+	round.RevenueRate = pool.Pool[1].Revenue
 	resp, err := dao.CacheIns().Luck5Deal(ctx, round)
 	return luck5Response(resp, err, req.RoundId)
 }
@@ -127,6 +132,15 @@ func validateLuck5Record(req *services.Luck5SettleReq) bool {
 		record.CurrencySymbol == req.CurrencyType && (record.AgentId == nil || *record.AgentId == req.AgentId)
 }
 
+func validateLuck5SettleRequest(req *services.Luck5SettleReq) bool {
+	if req == nil || strings.TrimSpace(req.AttemptId) == "" || req.AttemptId != strings.TrimSpace(req.AttemptId) || len(req.AttemptId) > 128 {
+		return false
+	}
+	round := &dao.Luck5Round{UserId: req.UserId, AgentId: req.AgentId, GameId: req.GameId, CurrencyType: req.CurrencyType, RoundId: req.RoundId}
+	_, winOK := parseLuck5Amount(req.WinAmount)
+	return validateLuck5Identity(round) && winOK && validateLuck5Record(req)
+}
+
 // 已预扣局直接按原池派奖，记录保存失败时资金阶段保留供原请求补完。
 func (d *LotteryService) Luck5Settle(ctx context.Context, req *services.Luck5SettleReq) (*services.Luck5Resp, error) {
 	if req == nil {
@@ -134,16 +148,17 @@ func (d *LotteryService) Luck5Settle(ctx context.Context, req *services.Luck5Set
 	}
 	round := &dao.Luck5Round{UserId: req.UserId, AgentId: req.AgentId, GameId: req.GameId, CurrencyType: req.CurrencyType, RoundId: req.RoundId, RecordJson: req.RecordJson}
 	win, ok := parseLuck5Amount(req.WinAmount)
-	if !validateLuck5Identity(round) || !ok || !validateLuck5Record(req) {
+	if !ok || !validateLuck5SettleRequest(req) {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidSettle"}, nil
 	}
-	lockKey := buildIdempotencyKey("luck5Lock", req.RoundId)
+	lockKey := luck5FundsLockKey(req.AgentId, req.GameId)
 	if code := d.beginMultiOpLock(lockKey); code != services.ErrorCode_OK {
 		return &services.Luck5Resp{Code: code, Error: "roundBusy"}, nil
 	}
 	defer d.endMultiOpLock(lockKey)
 	round.WinCent = win
-	round.Signature = idempotencySignature(fmt.Sprint(win), req.RecordJson)
+	round.AttemptId = req.AttemptId
+	round.Signature = idempotencySignature(req.AttemptId, fmt.Sprint(win), req.RecordJson)
 	resp, err := dao.CacheIns().Luck5Settle(ctx, round, func(stored *dao.Luck5Round) error {
 		return d.saveLuck5Record(ctx, stored)
 	})

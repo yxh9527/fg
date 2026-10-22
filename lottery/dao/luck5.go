@@ -19,26 +19,40 @@ import (
 
 // 发牌时固定资金身份、原池与汇率，结算不再按当前配置选择水池。
 type Luck5Round struct {
-	UserId       uint32          `json:"userId"`
-	AgentId      uint32          `json:"agentId"`
-	GameId       uint32          `json:"gameId"`
-	CurrencyType string          `json:"currencyType"`
-	RoundId      string          `json:"roundId"`
-	BetCent      int64           `json:"betCent"`
-	ReserveCent  int64           `json:"reserveCent"`
-	Symbol       string          `json:"symbol"`
-	Exchange     decimal.Decimal `json:"exchange"`
-	Account      string          `json:"account"`
-	WebId        uint32          `json:"webId"`
-	GameName     string          `json:"gameName"`
-	IsTourist    int32           `json:"isTourist"`
-	DealBalance  int64           `json:"dealBalance"`
-	Signature    string          `json:"signature"`
-	WinCent      int64           `json:"winCent"`
-	RecordJson   string          `json:"recordJson"`
-	Balance      int64           `json:"balance"`
-	FundsDone    bool            `json:"fundsDone"`
-	RecordDone   bool            `json:"recordDone"`
+	UserId       uint32                   `json:"userId"`
+	AgentId      uint32                   `json:"agentId"`
+	GameId       uint32                   `json:"gameId"`
+	CurrencyType string                   `json:"currencyType"`
+	RoundId      string                   `json:"roundId"`
+	BetCent      int64                    `json:"betCent"`
+	ReserveCent  int64                    `json:"reserveCent"`
+	Revenue      decimal.Decimal          `json:"revenue"`
+	RevenueRate  decimal.Decimal          `json:"revenueRate"`
+	Symbol       string                   `json:"symbol"`
+	Exchange     decimal.Decimal          `json:"exchange"`
+	Account      string                   `json:"account"`
+	WebId        uint32                   `json:"webId"`
+	GameName     string                   `json:"gameName"`
+	IsTourist    int32                    `json:"isTourist"`
+	DealBalance  int64                    `json:"dealBalance"`
+	DealCode     services.ErrorCode       `json:"dealCode"`
+	DealError    string                   `json:"dealError"`
+	Signature    string                   `json:"signature"`
+	AttemptId    string                   `json:"attemptId"`
+	Attempts     map[string]*Luck5Attempt `json:"attempts,omitempty"`
+	WinCent      int64                    `json:"winCent"`
+	RecordJson   string                   `json:"recordJson"`
+	Balance      int64                    `json:"balance"`
+	FundsDone    bool                     `json:"fundsDone"`
+	RecordDone   bool                     `json:"recordDone"`
+}
+
+type Luck5Attempt struct {
+	Signature string             `json:"signature"`
+	Code      services.ErrorCode `json:"code"`
+	Error     string             `json:"error"`
+	Balance   int64              `json:"balance"`
+	Accepted  bool               `json:"accepted"`
 }
 
 // 局号全局唯一，不能让相同局号在另一个用户、代理或币种下再次扣注。
@@ -50,6 +64,14 @@ func luck5Key(roundId string) string {
 // 钱包使用整数分；既有水池和统计按配置汇率换算到池单位。
 func luck5Amount(cent int64) decimal.Decimal {
 	return decimal.NewFromInt(cent).Shift(-2)
+}
+
+func luck5DealPoolAfter(pool, bet, revenue decimal.Decimal) decimal.Decimal {
+	return pool.Add(bet).Sub(revenue)
+}
+
+func luck5CanSettle(pool, reserve, win decimal.Decimal) bool {
+	return pool.Add(reserve).GreaterThanOrEqual(win)
 }
 
 // 在代理锁内读取持久化阶段，网络结果未知时也能按原局号确认。
@@ -83,7 +105,8 @@ func (rd *RedisDao) Luck5DealResult(ctx context.Context, request *Luck5Round) (*
 	if !sameLuck5Identity(round, request) || round.BetCent != request.BetCent || round.ReserveCent != request.ReserveCent {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "dealConflict"}, nil
 	}
-	return &services.Luck5Resp{Code: services.ErrorCode_OK, Ret: true, CurrencyCent: round.DealBalance}, nil
+	return &services.Luck5Resp{Code: round.DealCode, Ret: round.DealCode == services.ErrorCode_OK,
+		CurrencyCent: round.DealBalance, Error: round.DealError}, nil
 }
 
 // 资金事务同时提交钱包、原池统计和阶段结果；只在成功确认后推进内存缓存。
@@ -97,6 +120,7 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 	bet := luck5Amount(round.BetCent).Mul(round.Exchange)
 	win := luck5Amount(round.WinCent).Mul(round.Exchange)
 	reserve := luck5Amount(round.ReserveCent).Mul(round.Exchange)
+	revenue := round.Revenue
 	if round.IsTourist == 0 {
 		if settle {
 			nextGame.TotalProfLoss = nextGame.TotalProfLoss.Sub(reserve.Sub(win))
@@ -106,6 +130,7 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 			nextUser.Count = nextUser.Count.Add(decimal.NewFromInt(1))
 		} else {
 			nextGame.TotalEffectBet = nextGame.TotalEffectBet.Add(bet)
+			nextGame.TotalRevenue = nextGame.TotalRevenue.Add(revenue)
 			nextGame.TotalProfLoss = nextGame.TotalProfLoss.Add(reserve)
 			nextUser.TotalEffectBet = nextUser.TotalEffectBet.Add(bet)
 		}
@@ -164,6 +189,7 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 				pipe.ZIncrBy(ctx, "userBetCount", 1, userMember)
 			} else {
 				pipe.ZIncrBy(ctx, esindex.AgentEffectData(), bet.InexactFloat64(), member)
+				pipe.ZIncrBy(ctx, esindex.AgentRevenueData(), revenue.InexactFloat64(), member)
 				pipe.ZIncrBy(ctx, esindex.AgentProfitLossData(), reserve.InexactFloat64(), member)
 				pipe.ZIncrBy(ctx, "userTotalEffBet", bet.InexactFloat64(), userMember)
 			}
@@ -205,7 +231,7 @@ func (gcm *GameCacheMgr) Luck5Deal(ctx context.Context, request *Luck5Round) (*s
 		return nil, err
 	}
 	if balance < request.BetCent {
-		return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_MONEY, CurrencyCent: balance, Error: "balanceInsufficient"}, nil
+		return RedisIns().saveLuck5DealRejection(ctx, request, &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_MONEY, CurrencyCent: balance, Error: "balanceInsufficient"})
 	}
 	game := agent.GetGame(request.Symbol)
 	user := agent.GetUser(request.UserId)
@@ -213,13 +239,40 @@ func (gcm *GameCacheMgr) Luck5Deal(ctx context.Context, request *Luck5Round) (*s
 	request.IsTourist = user.IsTourist
 	bet := luck5Amount(request.BetCent).Mul(request.Exchange)
 	reserve := luck5Amount(request.ReserveCent).Mul(request.Exchange)
-	if user.IsTourist == 0 && poolWithBase(game, agent.Id, request.Symbol).Add(bet).LessThan(reserve) {
-		return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, CurrencyCent: balance, Error: "poolInsufficient"}, nil
+	request.Revenue = bet.Mul(request.RevenueRate).Truncate(4)
+	currentPool := poolWithBase(game, agent.Id, request.Symbol)
+	if user.IsTourist == 0 && luck5DealPoolAfter(currentPool, bet, request.Revenue).LessThan(reserve) {
+		return RedisIns().saveLuck5DealRejection(ctx, request, &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, CurrencyCent: balance, Error: "poolInsufficient"})
 	}
+	request.DealCode = services.ErrorCode_OK
+	request.DealError = ""
 	if code, err := RedisIns().commitLuck5Funds(ctx, agent, request, false); err != nil {
 		return &services.Luck5Resp{Code: code, CurrencyCent: balance, Error: "dealFundsFailed"}, err
 	}
 	return &services.Luck5Resp{Code: services.ErrorCode_OK, Ret: true, CurrencyCent: request.DealBalance}, nil
+}
+
+func (rd *RedisDao) saveLuck5DealRejection(ctx context.Context, request *Luck5Round, response *services.Luck5Resp) (*services.Luck5Resp, error) {
+	request.DealCode = response.Code
+	request.DealError = response.Error
+	request.DealBalance = response.CurrencyCent
+	raw, err := jsoniter.MarshalToString(request)
+	if err != nil {
+		return nil, err
+	}
+	if err := rd.cli.SetNX(ctx, luck5Key(request.RoundId), raw, 0).Err(); err != nil {
+		if !errors.Is(err, redis.Nil) {
+			return nil, err
+		}
+	}
+	stored, loadErr := rd.loadLuck5Round(ctx, request.RoundId)
+	if loadErr != nil {
+		return nil, loadErr
+	}
+	if stored == nil || !sameLuck5Identity(stored, request) || stored.BetCent != request.BetCent || stored.ReserveCent != request.ReserveCent {
+		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "dealConflict"}, nil
+	}
+	return &services.Luck5Resp{Code: stored.DealCode, Ret: stored.DealCode == services.ErrorCode_OK, CurrencyCent: stored.DealBalance, Error: stored.DealError}, nil
 }
 
 // 结算只动已预扣资金；资金阶段已提交时重试只保存原记录。
@@ -234,19 +287,51 @@ func (gcm *GameCacheMgr) Luck5Settle(ctx context.Context, request *Luck5Round, s
 	if round == nil || !sameLuck5Identity(round, request) {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "roundIdentityMismatch"}, nil
 	}
-	if request.WinCent < 0 || request.WinCent > round.ReserveCent {
-		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "winExceedsReserve"}, nil
+	if request.WinCent < 0 || request.AttemptId == "" {
+		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidAttempt"}, nil
 	}
-	if round.FundsDone && round.Signature != request.Signature {
-		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "settleConflict"}, nil
+	if round.Attempts == nil {
+		round.Attempts = make(map[string]*Luck5Attempt)
+	}
+	if attempt := round.Attempts[request.AttemptId]; attempt != nil {
+		if attempt.Signature != request.Signature {
+			return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "settleConflict"}, nil
+		}
+		if !attempt.Accepted {
+			return &services.Luck5Resp{Code: attempt.Code, Ret: false, CurrencyCent: attempt.Balance, Error: attempt.Error}, nil
+		}
+	} else if round.FundsDone || round.AttemptId != "" {
+		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "settleAlreadyAccepted"}, nil
 	}
 	if round.RecordDone {
 		return &services.Luck5Resp{Code: services.ErrorCode_OK, Ret: true, CurrencyCent: round.Balance}, nil
 	}
 	if !round.FundsDone {
+		agentGame := agent.GetGame(round.Symbol)
+		pool := poolWithBase(agentGame, agent.Id, round.Symbol)
+		reserve := luck5Amount(round.ReserveCent).Mul(round.Exchange)
+		win := luck5Amount(request.WinCent).Mul(round.Exchange)
+		if round.IsTourist == 0 && !luck5CanSettle(pool, reserve, win) {
+			balance, balanceErr := RedisIns().GetPlayerCurrency(round.UserId)
+			if balanceErr != nil {
+				return &services.Luck5Resp{Code: services.ErrorCode_SYSTEM_ERROR, Error: "balanceReadFailed"}, balanceErr
+			}
+			attempt := &Luck5Attempt{Signature: request.Signature, Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, Error: "poolInsufficient", Balance: balance}
+			round.Attempts[request.AttemptId] = attempt
+			raw, marshalErr := jsoniter.MarshalToString(round)
+			if marshalErr != nil {
+				return nil, marshalErr
+			}
+			if err := RedisIns().cli.Set(ctx, luck5Key(round.RoundId), raw, 0).Err(); err != nil {
+				return &services.Luck5Resp{Code: services.ErrorCode_SYSTEM_ERROR, Error: "attemptSaveFailed"}, err
+			}
+			return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, CurrencyCent: balance, Error: "poolInsufficient"}, nil
+		}
 		round.WinCent = request.WinCent
 		round.RecordJson = request.RecordJson
 		round.Signature = request.Signature
+		round.AttemptId = request.AttemptId
+		round.Attempts[request.AttemptId] = &Luck5Attempt{Signature: request.Signature, Code: services.ErrorCode_OK, Accepted: true}
 		if code, err := RedisIns().commitLuck5Funds(ctx, agent, round, true); err != nil {
 			return &services.Luck5Resp{Code: code, Error: "settleFundsFailed"}, err
 		}
