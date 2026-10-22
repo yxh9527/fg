@@ -41,6 +41,19 @@ func TestLuck5RecordIdentityAndTimestamp(t *testing.T) {
 	}
 }
 
+func TestLuck5FundsLockIsPerRound(t *testing.T) {
+	deal := luck5FundsLockKey(1, 7012, 279, "round-a")
+	settle := luck5FundsLockKey(1, 7012, 279, "round-a")
+	otherPlayer := luck5FundsLockKey(1, 7012, 280, "round-b")
+	otherRound := luck5FundsLockKey(1, 7012, 279, "round-b")
+	if deal != settle {
+		t.Fatal("deal and settle of the same round must share the lock")
+	}
+	if deal == otherPlayer || deal == otherRound {
+		t.Fatal("different players or rounds must not share the lock")
+	}
+}
+
 func TestLuck5SettleRequiresAttemptID(t *testing.T) {
 	req := &services.Luck5SettleReq{UserId: 279, GameId: 7012, CurrencyType: "CNY", RoundId: "round", WinAmount: "0.00", RecordJson: `{"recordId":"round","userId":279,"gameId":7012,"currencySymbol":"CNY","createdAtMs":1}`}
 	if validateLuck5SettleRequest(req) {

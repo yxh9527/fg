@@ -44,8 +44,9 @@ func validateLuck5Identity(round *dao.Luck5Round) bool {
 		strings.TrimSpace(round.CurrencyType) != ""
 }
 
-func luck5FundsLockKey(agentID, gameID uint32) string {
-	return buildIdempotencyKey("luck5FundsLock", u32Str(agentID), u32Str(gameID))
+// 资金锁按局号互斥：同一局的发牌和结算串行，不同玩家、不同局互不影响。
+func luck5FundsLockKey(agentID, gameID, userID uint32, roundId string) string {
+	return buildIdempotencyKey("luck5FundsLock", u32Str(agentID), u32Str(gameID), u32Str(userID), roundId)
 }
 
 // 业务拒绝通过协议码返回，系统错误记录上下文但不暴露原始记录。
@@ -73,7 +74,7 @@ func (d *LotteryService) Luck5Deal(ctx context.Context, req *services.Luck5DealR
 	if !validateLuck5Identity(round) || !betOK || !reserveOK {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidDeal"}, nil
 	}
-	lockKey := luck5FundsLockKey(req.AgentId, req.GameId)
+	lockKey := luck5FundsLockKey(req.AgentId, req.GameId, req.UserId, req.RoundId)
 	if code := d.beginMultiOpLock(lockKey); code != services.ErrorCode_OK {
 		return &services.Luck5Resp{Code: code, Error: "roundBusy"}, nil
 	}
@@ -151,7 +152,7 @@ func (d *LotteryService) Luck5Settle(ctx context.Context, req *services.Luck5Set
 	if !ok || !validateLuck5SettleRequest(req) {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidSettle"}, nil
 	}
-	lockKey := luck5FundsLockKey(req.AgentId, req.GameId)
+	lockKey := luck5FundsLockKey(req.AgentId, req.GameId, req.UserId, req.RoundId)
 	if code := d.beginMultiOpLock(lockKey); code != services.ErrorCode_OK {
 		return &services.Luck5Resp{Code: code, Error: "roundBusy"}, nil
 	}
