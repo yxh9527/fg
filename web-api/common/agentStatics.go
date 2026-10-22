@@ -79,7 +79,7 @@ func getSettlementStat(start, end time.Time) map[string]*view.DataAnalysisItem {
 							}
 							tmp.Symbol = cfg.Symbol
 						}
-						result[fmt.Sprintf("%d-%d", int(agentId), int(gameId))] = tmp
+						putAnalysisItem(result, tmp)
 					}
 				}
 			}
@@ -174,13 +174,31 @@ func getSettlementRangeData(start, end time.Time) map[string]*view.DataAnalysisI
 							}
 							tmp.Symbol = cfg.Symbol
 						}
-						result[fmt.Sprintf("%d-%d", int(agentId), int(gameId))] = tmp
+						putAnalysisItem(result, tmp)
 					}
 				}
 			}
 		}
 	}
 	return result
+}
+
+func putAnalysisItem(result map[string]*view.DataAnalysisItem, item *view.DataAnalysisItem) {
+	key := fmt.Sprintf("%d-%d", item.AgentId, item.GameId)
+	if old, ok := result[key]; ok {
+		old.DocCount += item.DocCount
+		old.ProfitLossTotal += item.ProfitLossTotal
+		old.UserTotal += item.UserTotal
+		old.EffectiveBetsTotal += item.EffectiveBetsTotal
+		old.ChipsTotal += item.ChipsTotal
+		old.RevenueTotal += item.RevenueTotal
+		old.PumpTotal += item.PumpTotal
+		if item.WebId > 0 {
+			old.WebId = item.WebId
+		}
+		return
+	}
+	result[key] = item
 }
 
 // 保存数据
