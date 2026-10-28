@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"app/config"
 	"app/esindex"
 	"context"
 	"crypto/sha256"
@@ -19,6 +20,9 @@ import (
 
 // 发牌时固定资金身份、原池与汇率，结算不再按当前配置选择水池。
 type Luck5Round struct {
+	PoolSymbol   string                   `json:"poolSymbol,omitempty"`
+	PoolVersion  int64                    `json:"poolVersion,omitempty"`
+	PoolBase     decimal.Decimal          `json:"poolBase"`
 	UserId       uint32                   `json:"userId"`
 	AgentId      uint32                   `json:"agentId"`
 	GameId       uint32                   `json:"gameId"`
@@ -113,7 +117,10 @@ func (rd *RedisDao) Luck5DealResult(ctx context.Context, request *Luck5Round) (*
 func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, round *Luck5Round, settle bool) (services.ErrorCode, error) {
 	playerKey := "player_" + strconv.FormatUint(uint64(round.UserId), 10)
 	roundKey := luck5Key(round.RoundId)
-	game := agent.GetGame(round.Symbol)
+	if round.PoolSymbol == "" {
+		round.PoolSymbol = round.Symbol
+	}
+	game := agent.getPoolGame(round.PoolSymbol)
 	user := agent.GetUser(round.UserId)
 	nextGame := *game
 	nextUser := *user
@@ -180,7 +187,7 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 		pipe.SAdd(ctx, "dirty_list_imp", round.UserId)
 		pipe.Set(ctx, roundKey, raw, 0)
 		if round.IsTourist == 0 {
-			member := fmt.Sprintf("%d_%s", agent.Id, round.Symbol)
+			member := fmt.Sprintf("%d_%s", agent.Id, round.PoolSymbol)
 			userMember := strconv.FormatUint(uint64(round.UserId), 10)
 			if settle {
 				pipe.ZIncrBy(ctx, esindex.AgentProfitLossData(), win.Sub(reserve).InexactFloat64(), member)
@@ -205,7 +212,7 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 		if readErr != nil || stored == nil || !sameLuck5Identity(stored, round) ||
 			stored.BetCent != round.BetCent || stored.ReserveCent != round.ReserveCent ||
 			(settle && (!stored.FundsDone || stored.Signature != round.Signature)) || (!settle && stored.FundsDone) {
-			delete(agent.gameCache, round.Symbol)
+			delete(agent.gameCache, round.PoolSymbol)
 			delete(agent.userCache, round.UserId)
 			return code, err
 		}
@@ -234,6 +241,11 @@ func (gcm *GameCacheMgr) Luck5Deal(ctx context.Context, request *Luck5Round) (*s
 		return RedisIns().saveLuck5DealRejection(ctx, request, &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_MONEY, CurrencyCent: balance, Error: "balanceInsufficient"})
 	}
 	game := agent.GetGame(request.Symbol)
+	request.PoolSymbol = game.Symbol
+	request.PoolBase = poolCfgBase(agent.Id, request.Symbol)
+	if group := config.CfgIns.GetPoolGroup(agent.Id, request.Symbol); group != nil {
+		request.PoolVersion = group.Version
+	}
 	user := agent.GetUser(request.UserId)
 	request.Account = user.Account
 	request.IsTourist = user.IsTourist
@@ -307,8 +319,12 @@ func (gcm *GameCacheMgr) Luck5Settle(ctx context.Context, request *Luck5Round, s
 		return &services.Luck5Resp{Code: services.ErrorCode_OK, Ret: true, CurrencyCent: round.Balance}, nil
 	}
 	if !round.FundsDone {
-		agentGame := agent.GetGame(round.Symbol)
-		pool := poolWithBase(agentGame, agent.Id, round.Symbol)
+		if round.PoolSymbol == "" {
+			round.PoolSymbol = round.Symbol
+			round.PoolBase = poolCfgBase(agent.Id, round.Symbol)
+		}
+		agentGame := agent.getPoolGame(round.PoolSymbol)
+		pool := poolRaw(agentGame).Add(round.PoolBase)
 		reserve := luck5Amount(round.ReserveCent).Mul(round.Exchange)
 		win := luck5Amount(request.WinCent).Mul(round.Exchange)
 		if round.IsTourist == 0 && !luck5CanSettle(pool, reserve, win) {

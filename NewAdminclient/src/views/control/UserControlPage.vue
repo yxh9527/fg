@@ -101,6 +101,9 @@
       </div>
 
       <el-tabs v-model="activeTab" class="control-tabs" @tab-click="handleTabChange">
+        <el-tab-pane label="水池合并配置" name="poolGroup">
+          <pool-group-panel ref="poolGroupPanel" v-if="activeTab === 'poolGroup'" :agent-id="selectedAgentId" :site-id="selectedSiteId" :games="gameOptions" @count="poolGroupCount = $event" @changed="fetchPoolConfigs" />
+        </el-tab-pane>
         <el-tab-pane label="游戏设置" name="game">
           <div class="tab-stack">
             <div class="metric-grid">
@@ -412,6 +415,7 @@
 import * as echarts from "echarts";
 import dayjs from "dayjs";
 import AppTable from "@/components/AppTable.vue";
+import PoolGroupPanel from "./PoolGroupPanel.vue";
 import {
   getExchangeConfig,
   getControlCoefficientConfig,
@@ -495,10 +499,12 @@ export default {
   name: "UserControlPage",
   components: {
     AppTable,
+    PoolGroupPanel,
   },
   data() {
     return {
       activeTab: "game",
+      poolGroupCount: 0,
       resetIntervalOptions: [1, 3, 7, 10, 14, 30],
       loading: {
         pool: false,
@@ -562,6 +568,7 @@ export default {
     },
     activeTabMeta() {
       const metaMap = {
+        poolGroup: {title: "水池合并配置", note: "维护代理水池组，组内游戏共享水池余额。"},
         game: {
           title: "游戏设置",
           note: "集中维护重置周期、水池参数和房间控制阈值。",
@@ -586,6 +593,7 @@ export default {
       return metaMap[this.activeTab] || metaMap.game;
     },
     activeRecordCount() {
+      if (this.activeTab === "poolGroup") return this.poolGroupCount;
       if (this.activeTab === "game") return this.poolConfigData.length;
       if (this.activeTab === "award") return this.awardConfigData.length;
       if (this.activeTab === "stock") return this.stockTotal || this.stockData.length;
@@ -596,6 +604,7 @@ export default {
       return 0;
     },
     activeRecordCaption() {
+      if (this.activeTab === "poolGroup") return "当前代理的水池组数量";
       if (this.activeTab === "game") return "当前游戏下的水池配置数";
       if (this.activeTab === "award") return "分段奖励配置条目";
       if (this.activeTab === "stock") return "库存预警相关记录";
@@ -614,6 +623,7 @@ export default {
     },
     poolColumns() {
       return [
+        {title: "水池归属", key: "groupName", minWidth: 120, align: "center", render: (h, {row}) => h("span", row.groupName || "独立水池")},
         { title: "ID", key: "gameId", width: 90, align: "center" },
         { title: "标识", key: "symbol", width: 120, align: "center" },
         {
@@ -806,6 +816,7 @@ export default {
       this.refreshActiveTab();
     },
     refreshActiveTab() {
+      if (this.activeTab === "poolGroup" && this.$refs.poolGroupPanel) this.$refs.poolGroupPanel.fetchGroups();
       this.fetchPoolConfigs();
       if (this.activeTab === "award") {
         this.fetchAwardConfigs();
@@ -894,6 +905,8 @@ export default {
               symbol: item.value.symbol,
               gameId: item.value.gameId,
               key: item.key,
+              groupId: item.groupId,
+              groupName: item.groupName,
             });
           });
         });
@@ -903,6 +916,7 @@ export default {
       }
     },
     openPoolDialog(row) {
+      if (row && row.groupId) { this.$message.info(`该游戏使用水池组“${row.groupName}”的配置，请在水池合并配置页签查看`); return; }
       if (!row && !this.currentGameMeta) {
         this.$message.error("请先选择游戏");
         return;
@@ -963,6 +977,7 @@ export default {
       this.fetchPoolConfigs();
     },
     async syncPoolConfig(row) {
+      if (row.groupId) { this.$message.info("组水池配置不能通过独立游戏配置同步"); return; }
       try {
         await this.$confirm("确认同步该默认水池配置到全部代理？", "提示", { type: "warning" });
       } catch (error) {

@@ -49,7 +49,7 @@ func (s *Server) Serve(rds *dao.RedisDao, db *dao.DBDao) {
 	*/
 
 	// 创建一个grpc Server服务对象,Handler非必传
-	ss := grpc.NewServer(grpc.KeepaliveParams(keepalive.ServerParameters{
+	ss := grpc.NewServer(grpc.UnaryInterceptor(poolGroupInterceptor), grpc.KeepaliveParams(keepalive.ServerParameters{
 		MaxConnectionAge:      2 * time.Minute,
 		MaxConnectionAgeGrace: 30 * time.Second,
 		Time:                  30 * time.Second,

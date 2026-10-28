@@ -6,6 +6,12 @@ const mergeData = (items) => ({
   ...Object.assign({}, ...(items || [])),
 });
 
+export const getPoolGroups = (params) => request({url: 'v2/govern/pool-groups', method: 'get', params: {token: getToken(), ...params}});
+export const getPoolGroupGames = (params) => request({url: 'v2/govern/pool-groups/games', method: 'get', params: {token: getToken(), ...params}});
+export const createPoolGroup = (data) => request({url: 'v2/govern/pool-groups/create', method: 'post', params: {token: getToken()}, data});
+export const updatePoolGroup = (data) => request({url: 'v2/govern/pool-groups/update', method: 'post', params: {token: getToken()}, data});
+export const deletePoolGroup = (data) => request({url: 'v2/govern/pool-groups/delete', method: 'post', params: {token: getToken()}, data});
+
 export const getReportData = (items) =>
   request({
     url: "v2/report-form/listWithAgent",

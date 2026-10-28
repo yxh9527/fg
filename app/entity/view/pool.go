@@ -24,9 +24,11 @@ type Pool struct {
 }
 
 type PoolData struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
-	Name  string      `json:"name"`
+	GroupID   int64       `json:"groupId,omitempty"`
+	GroupName string      `json:"groupName,omitempty"`
+	Key       string      `json:"key"`
+	Value     interface{} `json:"value"`
+	Name      string      `json:"name"`
 }
 
 type PoolLogItem struct {

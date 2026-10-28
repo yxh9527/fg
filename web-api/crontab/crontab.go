@@ -1,8 +1,9 @@
-﻿package crontab
+package crontab
 
 import (
 	"app/entity/view"
 	"app/esindex"
+	"app/poolgroup"
 	"app/tables/manager"
 	"context"
 	"encoding/json"
@@ -36,11 +37,11 @@ func clearPool() {
 	if !rpc.Now && rpc.ResetTime > time.Now().Unix() {
 		return
 	}
-	msg, _ := jsoniter.MarshalToString(map[string]interface{}{
-		"event": "resetPool",
-		"data":  "{}",
-	})
-	dao.RedisIns().Publish("message", msg)
+	store := poolgroup.Store{DB: dao.Mysql().Manager, Redis: dao.RedisIns().Client}
+	if err := store.QueueReset(context.Background(), fmt.Sprintf("%d-%t", rpc.ResetTime, rpc.Now)); err != nil {
+		zap.L().Error("创建水池重置任务失败", zap.Error(err))
+		return
+	}
 	rpc.Now = false
 	rpc.ResetTime = time.Now().Unix() + int64(rpc.Interval)*24*60*60
 	s, _ := jsoniter.MarshalToString(rpc)

@@ -92,18 +92,30 @@ type RoundItem struct {
 }
 
 type AgentData struct {
-	lock       *sync.RWMutex
-	Id         int64
-	WebId      int64
-	gameCache  map[string]*Game      //key:{symbol}
-	userCache  map[uint32]*User      //
-	RoundCache map[string]*RoundItem //key:注单号 value:最大赔付值
+	poolManaged bool // Managed agents flush under the shared Redis lease, never by a stale timer snapshot.
+	lock        *sync.RWMutex
+	Id          int64
+	WebId       int64
+	gameCache   map[string]*Game      //key:{symbol}
+	userCache   map[uint32]*User      //
+	RoundCache  map[string]*RoundItem //key:注单号 value:最大赔付值
 }
 
 func (ad *AgentData) GetUser(userId uint32) *User {
 	u := ad.userCache[userId]
 	if u == nil {
-		e, p, c, acc, isTourist := RedisIns().GetUserStatData(userId)
+		var e, p, c decimal.Decimal
+		var acc string
+		var isTourist int32
+		if ad.poolManaged {
+			var err error
+			e, p, c, acc, isTourist, err = RedisIns().GetUserStatDataChecked(userId)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			e, p, c, acc, isTourist = RedisIns().GetUserStatData(userId)
+		}
 		u = &User{
 			TotalEffectBet: e,
 			TotalProfLoss:  p,
@@ -125,9 +137,17 @@ func (ad *AgentData) SetUser(id uint32, u *User) {
 }
 
 func (ad *AgentData) GetGame(symbol string) *Game {
+	symbol = config.CfgIns.PoolStorageSymbol(ad.Id, symbol)
+	return ad.getPoolGame(symbol)
+}
+
+func (ad *AgentData) getPoolGame(symbol string) *Game {
 	g := ad.gameCache[symbol]
 	if g == nil {
-		e, c, p, r, _ := RedisIns().GetGameStatData(ad.Id, symbol)
+		e, c, p, r, ok := RedisIns().GetGameStatData(ad.Id, symbol)
+		if !ok {
+			panic("读取水池运行数据失败")
+		}
 		g = &Game{
 			TotalEffectBet: e,
 			TotalChips:     c,
@@ -707,12 +727,12 @@ func GetAgentChanges() ([]*User, []*Game) {
 	for _, agent := range gameCache.agents {
 		agent.lock.RLock()
 		for _, item := range agent.gameCache {
-			if item.UpdateTime > 0 {
+			if !agent.poolManaged && item.UpdateTime > 0 {
 				games = append(games, item)
 			}
 		}
 		for _, item := range agent.userCache {
-			if item.UpdateTime > 0 {
+			if !agent.poolManaged && item.UpdateTime > 0 {
 				users = append(users, item)
 			}
 		}
@@ -722,29 +742,7 @@ func GetAgentChanges() ([]*User, []*Game) {
 }
 
 func ResetPool(data interface{}) {
-	gameCache.lock.Lock()
-	defer gameCache.lock.Unlock()
-
-	for _, agent := range gameCache.agents {
-		for _, item := range agent.gameCache {
-			item.TotalChips = decimal.Zero
-			item.TotalEffectBet = decimal.Zero
-			item.TotalProfLoss = decimal.Zero
-			item.TotalRevenue = decimal.Zero
-		}
-	}
-
-	piple := RedisIns().cli.Pipeline()
-	zap.L().Debug("清理水池开始")
-	piple.Del(context.Background(), esindex.AgentEffectData())
-	piple.Del(context.Background(), esindex.AgentChipsData())
-	piple.Del(context.Background(), esindex.AgentRevenueData())
-	piple.Del(context.Background(), esindex.AgentProfitLossData())
-	_, err := piple.Exec(context.Background())
-	if err != nil {
-		zap.L().Error("Redis重置pool失败!", zap.Any("err", err))
-	}
-	zap.L().Debug("清理水池结束")
+	queuePoolReset(data)
 }
 
 // 获取单控阈值
@@ -761,6 +759,15 @@ func getSingleCtrlThreshold() {
 func SaveAgentData(games []*Game) {
 	piple, n := RedisIns().cli.Pipeline(), 0
 	for _, item := range games {
+		if gameCache != nil {
+			agent := gameCache.GetAgent(item.AgentId)
+			agent.lock.RLock()
+			managed := agent.poolManaged
+			agent.lock.RUnlock()
+			if managed {
+				continue
+			}
+		}
 		zap.L().Debug("定时缓存代理数据", zap.Any("item", item))
 		if item.UpdateTime > 0 {
 			key := fmt.Sprintf("%d_%s", item.AgentId, item.Symbol)
@@ -791,6 +798,15 @@ func SaveAgentData(games []*Game) {
 func SaveUserData(users []*User) {
 	piple, n := RedisIns().cli.Pipeline(), 0
 	for _, item := range users {
+		if gameCache != nil {
+			agent := gameCache.GetAgent(item.AgentId)
+			agent.lock.RLock()
+			managed := agent.poolManaged
+			agent.lock.RUnlock()
+			if managed {
+				continue
+			}
+		}
 		zap.L().Debug("定时缓存玩家数据", zap.Any("item", item))
 		if item.UpdateTime > 0 {
 			n++

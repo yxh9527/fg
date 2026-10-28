@@ -164,6 +164,7 @@ type GatewaysMgr struct {
 
 type Configs struct {
 	Lock        *sync.RWMutex
+	PoolGroups  map[int64][]*PoolGroupSnapshot
 	Pool        *PoolMgr
 	Award       *AwardMgr
 	Coefficient *ControlCoefficientConfig
@@ -305,16 +306,19 @@ func (cfg *Configs) GetControlCoefficient(averageBet, effectBet, profitLoss, rou
 func (cfg *Configs) GetPoolCfg(agentId int64, symbol string) *Pool {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
-	if cfg.Pool == nil {
-		return nil
+	return cfg.effectivePoolLocked(agentId, symbol)
+}
+
+func (cfg *Configs) effectivePoolLocked(agentId int64, symbol string) *Pool {
+	if group := cfg.poolGroupLocked(agentId, symbol); group != nil {
+		if original := cfg.independentPoolLocked(agentId, symbol); original != nil {
+			copy := *original
+			copy.Pool = group.Config.Pool
+			return &copy
+		}
+		return group.Config
 	}
-	if p := cfg.Pool.Agent[fmt.Sprintf("%d-%s", agentId, symbol)]; p != nil {
-		return p
-	}
-	if p := cfg.Pool.Agent[fmt.Sprintf("%d_%s", agentId, symbol)]; p != nil {
-		return p
-	}
-	return cfg.Pool.Default[symbol]
+	return cfg.independentPoolLocked(agentId, symbol)
 }
 
 func (cfg *Configs) GetPoolDefaultCfg(symbol string) *Pool {
@@ -332,14 +336,14 @@ func (cfg *Configs) GetPoolCfgByGameId(agentId, gameId int64) *Pool {
 	if cfg.Pool == nil {
 		return nil
 	}
-	for _, c := range cfg.Pool.Agent {
-		if c != nil && c.GameId == gameId {
-			return c
+	for key, c := range cfg.Pool.Agent {
+		if c != nil && c.GameId == gameId && (key == fmt.Sprintf("%d-%s", agentId, c.Symbol) || key == fmt.Sprintf("%d_%s", agentId, c.Symbol)) {
+			return cfg.effectivePoolLocked(agentId, c.Symbol)
 		}
 	}
-	for _, c := range cfg.Pool.Default {
+	for symbol, c := range cfg.Pool.Default {
 		if c != nil && c.GameId == gameId {
-			return c
+			return cfg.effectivePoolLocked(agentId, symbol)
 		}
 	}
 	return nil

@@ -37,6 +37,12 @@ func GovernList(ctx *gin.Context) {
 	dao.Mysql().Manager.Where("number in ?", gameIds).Find(&games)
 	poolDatas := make([]*view.PoolData, 0)
 	if agentId >= 0 {
+		state, loadErr := groupStore().Load(ctx.Request.Context(), int64(agentId))
+		if loadErr != nil {
+			poolGroupResponse(ctx, nil, loadErr)
+			return
+		}
+		config.CfgIns.ReplacePoolGroups(int64(agentId), state.Groups)
 		for _, game := range games {
 			// /fg/agent/{agentId}/pool/{symbol}
 			key := esindex.AgentKey(fmt.Sprintf("%d", agentId), "pool", game.ConfName)
@@ -47,6 +53,10 @@ func GovernList(ctx *gin.Context) {
 				Key:   key,
 			}
 			poolDatas = append(poolDatas, pd)
+			if group := config.CfgIns.GetPoolGroup(int64(agentId), game.ConfName); group != nil {
+				pd.GroupID = group.ID
+				pd.GroupName = group.Name
+			}
 		}
 	} else {
 		for _, game := range games {
@@ -131,6 +141,26 @@ func PoolEdit(ctx *gin.Context) {
 		zap.L().Error("水池配置key异常", zap.String("key", rawKey), zap.String("normalized", key))
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "配置key异常", Data: nil})
 		return
+	}
+	if isAgentPool {
+		agentID, parseErr := strconv.ParseInt(rest[0], 10, 64)
+		if parseErr != nil {
+			poolGroupResponse(ctx, nil, parseErr)
+			return
+		}
+		state, loadErr := groupStore().Load(ctx.Request.Context(), agentID)
+		if loadErr != nil {
+			poolGroupResponse(ctx, nil, loadErr)
+			return
+		}
+		for _, group := range state.Groups {
+			for _, symbol := range group.Symbols {
+				if symbol == rest[2] {
+					ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Msg: "该游戏已使用水池组配置，请在水池合并配置中查看"})
+					return
+				}
+			}
+		}
 	}
 	pool := &config.Pool{}
 	err := jsoniter.UnmarshalFromString(value, pool)

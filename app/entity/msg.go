@@ -271,4 +271,5 @@ type AgentStatuChange struct {
 }
 
 type ResetPool struct {
+	BatchID string `json:"batchId"`
 }
