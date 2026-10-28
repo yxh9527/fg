@@ -113,6 +113,11 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "pool_identity_mismatch", "未结算订单原池与当前路由不一致", append(poolLogFields, zap.String("originalPool", old.PoolSymbol), zap.String("currentPool", config.CfgIns.PoolStorageSymbol(agentID, game.ConfName)))...)
 		return nil, status.Error(codes.FailedPrecondition, "未结算订单的原水池与当前配置不一致")
 	}
+	if newBet && old == nil {
+		if err = dao.PoolGroupStore().CheckInitialization(ctx, agentID, game.ConfName); err != nil {
+			return nil, status.Error(codes.Unavailable, err.Error())
+		}
+	}
 	// Pending operations pause new bets but never block a recorded continuation or settlement.
 	pendingRaw, err := rdb.Get(ctx, poolgroup.Key(agentID, "pending")).Bytes()
 	if err != nil && !errors.Is(err, redis.Nil) {

@@ -44,8 +44,11 @@ type Intent struct {
 	Symbols   []string `json:"symbols"`
 }
 type Plan struct {
-	Intent Intent                    `json:"intent"`
-	Target *config.PoolGroupSnapshot `json:"target,omitempty"`
+	Intent       Intent                      `json:"intent"`
+	Target       *config.PoolGroupSnapshot   `json:"target,omitempty"`
+	Layout       []*config.PoolGroupSnapshot `json:"layout,omitempty"`
+	BaseRevision int64                       `json:"baseRevision,omitempty"`
+	Mappings     map[string]int64            `json:"mappings,omitempty"`
 }
 type State struct {
 	Revision        int64                       `json:"revision"`
@@ -73,12 +76,20 @@ func OperationGate(state *State, op manager.PoolGroupOperation, plan Plan) (pool
 	poolLogTrace := poollog.BeginDebug("poolgroup.OperationGate", poolLogFields...)
 	defer poolLogTrace.Finish(nil)
 	gate := Gate{OperationID: op.ID, All: op.Kind == "reset"}
+	if op.Kind == "layout" {
+		return layoutOperationGate(state, op, plan)
+	}
 	seen := map[string]bool{}
 	for _, group := range state.Groups {
-		if group.ID == op.GroupID {
+		if group.ID == op.GroupID || op.Kind == "layout" {
 			for _, symbol := range group.Symbols {
 				seen[symbol] = true
 			}
+		}
+	}
+	for _, group := range plan.Layout {
+		for _, symbol := range group.Symbols {
+			seen[symbol] = true
 		}
 	}
 	if plan.Target != nil {
@@ -117,7 +128,12 @@ func Migrate(db *gorm.DB) (poolLogResult0 error) {
 	poolLogFields := []zap.Field{}
 	poolLogTrace := poollog.Begin("poolgroup.Migrate", zap.InfoLevel, poolLogFields...)
 	defer poolLogTrace.Finish(&poolLogResult0)
-	return db.AutoMigrate(&manager.PoolGroup{}, &manager.PoolGroupMember{}, &manager.PoolGroupOperation{})
+	if err := db.AutoMigrate(&manager.PoolGroup{}, &manager.PoolGroupMember{}, &manager.PoolGroupOperation{},
+		&manager.PoolScheme{}, &manager.PoolSchemeRevision{}, &manager.PoolSchemeRegistry{},
+		&manager.PoolAgentBinding{}, &manager.PoolGroupMapping{}, &manager.PoolSyncBatch{}, &manager.PoolSyncItem{}); err != nil {
+		return err
+	}
+	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&manager.PoolSchemeRegistry{ID: 1}).Error
 }
 func (s Store) Load(ctx context.Context, agentID int64) (poolLogResult0 *State, poolLogResult1 error) {
 	poolLogFields := []zap.Field{}
@@ -364,6 +380,12 @@ func (s Store) Finalize(ctx context.Context, op manager.PoolGroupOperation, plan
 	poolLogTrace := poollog.Begin("poolgroup.Store.Finalize", zap.InfoLevel, poolLogFields...)
 	defer poolLogTrace.Finish(&poolLogResult0)
 	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if op.AgentID > 0 {
+			var agent manager.Agent
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", op.AgentID).Limit(1).Find(&agent).Error; err != nil {
+				return err
+			}
+		}
 		var row manager.PoolGroupOperation
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&row, op.ID).Error; err != nil {
 			poollog.Event(zap.ErrorLevel, "poolgroup.Store.Finalize", "tx.Clauses.First.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
@@ -371,6 +393,12 @@ func (s Store) Finalize(ctx context.Context, op manager.PoolGroupOperation, plan
 		}
 		if row.Status == Applied {
 			return nil
+		}
+		if op.Kind == "layout" {
+			if err := finalizeLayout(tx, op.AgentID, plan.Layout, plan.Mappings); err != nil {
+				return err
+			}
+			return tx.Model(&row).Updates(map[string]interface{}{"status": Applied, "error": ""}).Error
 		}
 		if op.Kind != "reset" {
 			if err := tx.Where("group_id = ? AND agent_id = ?", op.GroupID, op.AgentID).Delete(&manager.PoolGroupMember{}).Error; err != nil {
@@ -415,6 +443,9 @@ func NextState(state *State, op manager.PoolGroupOperation, plan Plan) (poolLogR
 	if state.LastOperationID >= op.ID {
 		poollog.Event(zap.InfoLevel, "poolgroup.NextState", "already_applied", "操作已应用，保持现有余额和运行版本", append(poolLogFields, zap.Int64("currentRevision", state.Revision))...)
 		return state, nil, nil
+	}
+	if op.Kind == "layout" {
+		return nextLayoutState(state, op, plan)
 	}
 	next := &State{Revision: state.Revision + 1, LastOperationID: op.ID, Groups: []*config.PoolGroupSnapshot{}}
 	clear := map[string]bool{}
@@ -685,7 +716,15 @@ func (s Store) QueueReset(ctx context.Context, batchID string) (poolLogResult0 e
 	for _, a := range agents {
 		payload, _ := json.Marshal(Plan{Intent: Intent{AgentID: a.Id, Kind: "reset", Symbols: symbols, RequestID: "reset:" + batchID}})
 		op := manager.PoolGroupOperation{AgentID: a.Id, RequestID: "reset:" + batchID, Kind: "reset", Payload: string(payload), Status: Pending}
-		if err := s.DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&op).Error; err != nil {
+		if err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if a.Id > 0 {
+				var row manager.Agent
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", a.Id).Limit(1).Find(&row).Error; err != nil {
+					return err
+				}
+			}
+			return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&op).Error
+		}); err != nil {
 			poollog.Event(zap.ErrorLevel, "poolgroup.Store.QueueReset", "s.DB.WithContext.Clauses.Create.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return err
 		}

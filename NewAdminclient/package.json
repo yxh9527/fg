@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test:pool-groups": "node --test tests/pool-group-panel.test.cjs",
+    "test:pool-groups": "node --test tests/pool-group-panel.test.cjs tests/pool-scheme-panel.test.cjs tests/pool-scheme-browser.test.cjs",
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build"
   },

@@ -12,7 +12,7 @@
         </div>
         <div class="toolbar-actions">
           <el-button :disabled="!hasSelectedAgent" :loading="loading" @click="fetchGroups">刷新</el-button>
-          <el-button type="primary" :disabled="!hasSelectedAgent || saving" @click="openDialog()">新增水池组</el-button>
+          <el-button v-if="!readOnly" type="primary" :disabled="!hasSelectedAgent || saving" @click="openDialog()">新增水池组</el-button>
         </div>
       </div>
       <el-table v-loading="loading" :data="groups" empty-text="暂无水池组" style="width: 100%">
@@ -27,7 +27,7 @@
         <el-table-column label="配置来源" min-width="140"><template slot-scope="scope">{{ gameLabel(scope.row.sourceSymbol) }}</template></el-table-column>
         <el-table-column prop="version" label="版本" width="70" />
         <el-table-column label="更新时间" width="170"><template slot-scope="scope">{{ dateTime(scope.row.updatedAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="140" fixed="right"><template slot-scope="scope">
+        <el-table-column v-if="!readOnly" label="操作" width="140" fixed="right"><template slot-scope="scope">
           <el-button type="text" :disabled="hasPending" @click="openDialog(scope.row)">编辑</el-button>
           <el-button type="text" :disabled="hasPending" @click="deleteGroup(scope.row)">删除</el-button>
         </template></el-table-column>
@@ -83,7 +83,7 @@ import { getPoolGroups, getPoolGroupGames, createPoolGroup, updatePoolGroup, del
 const freshForm = () => ({ groupId: 0, version: 0, name: '', symbols: [], sourceSymbol: '', config: null });
 export default withPoolGroupLogs({
   name: 'PoolGroupPanel',
-  props: { agentId: { default: null }, siteId: { default: null }, games: { type: Array, default: () => [] } },
+  props: { agentId: { default: null }, siteId: { default: null }, games: { type: Array, default: () => [] }, readOnly: { type: Boolean, default: false }, initialDraft: { type: Object, default: null } },
   data() { return { groups: [], operations: [], pendingOperation: null, availableGames: [], loading: false, loadingGames: false, gameLoadError: '', saving: false, loadError: '', dialogVisible: false, dialogSequence: 0, form: freshForm(), selectionOrder: [], pollTimer: null, sequence: 0, disposed: false, lastSignature: '', requestId: '', revision: null,
     configFields: [{key:'base',label:'初始 Base'},{key:'revenue',label:'税收'},{key:'min',label:'最低水位'},{key:'max',label:'最高水位'},{key:'normal',label:'正常水位'},{key:'control',label:'控制参数'},{key:'minRate',label:'最低比例'},{key:'maxRate',label:'最高比例'},{key:'normalRate',label:'正常比例'}] }; },
   computed: {
@@ -102,7 +102,7 @@ export default withPoolGroupLogs({
     configItem(config) { return config && config.pool && config.pool[1] || {}; },
     optionLabel(game) { return game.nameZH ? `${game.name} [${game.nameZH}]` : game.name || game.symbol; },
     gameLabel(symbol) { const game = [...this.availableGames, ...this.games].find(g => g.symbol === symbol); return game ? (game.label || this.optionLabel(game)) : symbol; },
-    kindLabel(kind) { return {create:'新增',update:'编辑',delete:'删除',reset:'重置'}[kind] || kind; },
+    kindLabel(kind) { return {create:'新增',update:'编辑',delete:'删除',reset:'重置',layout:'同步分组方案'}[kind] || kind; },
     statusLabel(value) { return {pending:'待执行',waiting:'等待结算',applying:'切换中',applied:'已生效',failed:'失败待重试'}[value] || value; },
     statusType(value) { return value === 'applied' ? 'success' : value === 'failed' ? 'danger' : 'warning'; },
     dateTime(value) { return value ? dayjs(Number(value) * 1000).format('YYYY-MM-DD HH:mm:ss') : '-'; },
@@ -123,11 +123,20 @@ export default withPoolGroupLogs({
       finally { if (!this.disposed && sequence === this.sequence) { this.loading = false; this.pollTimer = setTimeout(() => this.fetchGroups(), this.loadError ? 15000 : 4000); } }
     },
     async openDialog(row) {
+      if (this.readOnly) return;
       if (!this.hasSelectedAgent) { this.$message.warning('请先选择有效代理'); return; }
       this.dialogSequence++; this.availableGames = []; this.gameLoadError = '';
       this.form = row ? {groupId:row.id,version:row.version,name:row.name,symbols:[...row.symbols],sourceSymbol:row.sourceSymbol,config:row.config} : freshForm();
       this.selectionOrder = [...this.form.symbols]; this.requestId = ''; this.lastSignature = ''; this.dialogVisible = true;
       await this.fetchDialogGames();
+    },
+    async openInitialDraft() {
+      if (!this.initialDraft || this.readOnly || parseOptionalAgentId(this.agentId) !== 0) return;
+      const loading = this.openDialog();
+      this.form.name = this.initialDraft.name || '';
+      this.form.symbols = [...(this.initialDraft.symbols || [])];
+      this.selectionOrder = [...this.form.symbols];
+      await loading;
     },
     async fetchDialogGames() {
       if (!this.hasSelectedAgent || !this.dialogVisible) return;
@@ -150,6 +159,7 @@ export default withPoolGroupLogs({
       return this.requestId;
     },
     async saveGroup() {
+      if (this.readOnly) return;
       if (!this.hasSelectedAgent) { this.$message.warning('请先选择有效代理'); return; }
       if (this.hasPending) { this.$message.warning(this.pendingNotice); return; }
       if (this.loadingGames || this.gameLoadError) { this.$message.warning('请等待可选游戏加载成功后再提交'); return; }
@@ -161,6 +171,7 @@ export default withPoolGroupLogs({
       finally { this.saving = false; }
     },
     async deleteGroup(row) {
+      if (this.readOnly) return;
       if (this.hasPending) { this.$message.warning(this.pendingNotice); return; }
       const agentId = this.agentId;
       try { await this.$confirm(`确认删除“${row.name}”？成员游戏将分别从自己的初始配置重新累计，组余额不会分摊。`, '删除水池组', {type:'warning'}); } catch (error) { return; }
@@ -169,7 +180,7 @@ export default withPoolGroupLogs({
       await deletePoolGroup(payload); this.$message.success('删除操作已提交，等待执行'); await this.fetchGroups(); this.$emit('changed');
     },
   },
-  mounted() { this.fetchGroups(); },
+  mounted() { this.fetchGroups(); this.openInitialDraft(); },
   beforeDestroy() { this.disposed = true; this.sequence++; this.dialogSequence++; clearTimeout(this.pollTimer); },
 });
 </script>

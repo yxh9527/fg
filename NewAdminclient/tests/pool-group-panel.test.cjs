@@ -80,6 +80,15 @@ test('test agent zero can load groups, open a draft and submit its numeric ident
   let queried,selected,submitted;const {model}=instance({getPoolGroups:async params=>{queried=params;return {data:{data:{groups:[],operations:[],revision:0}}};},getPoolGroupGames:async params=>{selected=params;return {data:{data:[{symbol:'a',poolConfig:{pool:{1:{base:'10'}}}}]}};},createPoolGroup:async data=>{submitted=data;}});
   model.agentId=0;await model.fetchGroups();assert.equal(queried.agentId,0);await model.openDialog();assert.equal(model.dialogVisible,true);assert.equal(selected.agentId,0);model.form.name='测试组合池';model.form.symbols=['a'];await model.saveGroup();assert.equal(submitted.agentId,0);assert.equal(typeof submitted.agentId,'number');
 });
+
+test('test-agent shortcut opens the transferred draft without submitting it', async () => {
+  let writes = 0;
+  const {model} = instance({ getPoolGroupGames: async () => ({data:{data:[{symbol:'b',poolConfig:{pool:{1:{base:'10'}}}},{symbol:'a',poolConfig:{pool:{1:{base:'20'}}}}]}}), createPoolGroup: async () => { writes++; } });
+  model.agentId = 0; model.initialDraft = {name:'test4',symbols:['b','a']}; await model.openInitialDraft();
+  assert.equal(model.dialogVisible, true); assert.equal(model.form.name, 'test4'); assert.deepEqual(Array.from(model.form.symbols), ['b','a']);
+  assert.equal(model.sourceSymbol, 'b'); assert.equal(writes, 0);
+  model.agentId = 7; model.dialogVisible = false; await model.openInitialDraft(); assert.equal(model.dialogVisible, false);
+});
 test('route agent zero takes precedence over a saved positive agent after refresh', async () => {
   const {model,storage}=controlPage({siteId:'1',agentId:'0'},'7');await model.initBaseData();assert.equal(model.selectedAgentId,0);assert.equal(storage.getItem('agentVal'),'0');assert.equal(model.agentDisplayLabel,'测试代理');assert.ok(model.agentOptions.some(agent=>agent.id===0));
 });

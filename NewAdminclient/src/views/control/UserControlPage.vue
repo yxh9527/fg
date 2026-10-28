@@ -7,8 +7,8 @@
           <div class="panel-title">条件预览</div>
         </div>
         <div class="panel-actions control-hero__badges">
-          <span class="badge-inline">站点 {{ currentSiteName || "-" }}</span>
-          <span class="badge-inline">{{ agentDisplayLabel }}</span>
+          <span v-if="activeTab === 'poolGroup'" class="badge-inline">默认方案 / 代理专属配置</span>
+          <template v-else><span class="badge-inline">站点 {{ currentSiteName || "-" }}</span><span class="badge-inline">{{ agentDisplayLabel }}</span></template>
         </div>
       </div>
 
@@ -18,7 +18,7 @@
           <strong class="hero-overview__value">{{ activeTabMeta.title }}</strong>
           <span class="hero-overview__sub">{{ activeTabMeta.note }}</span>
         </div>
-        <div class="hero-overview__item">
+        <div v-if="activeTab !== 'poolGroup'" class="hero-overview__item">
           <span class="hero-overview__label">当前游戏</span>
           <strong class="hero-overview__value">{{ currentGameLabel }}</strong>
           <span class="hero-overview__sub">切换游戏后会同步刷新当前标签页</span>
@@ -26,7 +26,7 @@
         <div class="hero-overview__item">
           <span class="hero-overview__label">作用范围</span>
           <strong class="hero-overview__value">{{ scopeLabel }}</strong>
-          <span class="hero-overview__sub">支持默认配置和代理级配置两种范围</span>
+          <span class="hero-overview__sub">{{ activeTab === 'poolGroup' ? '适用站点和指定代理在下方页签内明确选择' : '支持默认配置和代理级配置两种范围' }}</span>
         </div>
         <div class="hero-overview__item">
           <span class="hero-overview__label">当前记录</span>
@@ -35,7 +35,7 @@
         </div>
       </div>
 
-      <div class="control-filter-board">
+      <div v-if="activeTab !== 'poolGroup'" class="control-filter-board">
         <div class="control-filter-board__head">
           <div>
             <div class="panel-kicker">Filter</div>
@@ -76,7 +76,7 @@
         </div>
       </div>
 
-      <el-card shadow="never" class="content-card section-card section-card--table hero-pool-card">
+      <el-card v-if="activeTab !== 'poolGroup'" shadow="never" class="content-card section-card section-card--table hero-pool-card">
         <div class="table-toolbar">
           <div>
             <div class="panel-kicker">Pool</div>
@@ -102,7 +102,7 @@
 
       <el-tabs v-model="activeTab" class="control-tabs" @tab-click="handleTabChange">
         <el-tab-pane label="水池合并配置" name="poolGroup">
-          <pool-group-panel ref="poolGroupPanel" v-if="activeTab === 'poolGroup'" :agent-id="selectedAgentId" :site-id="selectedSiteId" :games="gameOptions" @count="poolGroupCount = $event" @changed="fetchPoolConfigs" />
+          <pool-group-panel ref="poolGroupPanel" v-if="activeTab === 'poolGroup'" :sites="siteOptions" :games="gameOptions" @count="poolGroupCount = $event" @changed="fetchPoolConfigs" />
         </el-tab-pane>
         <el-tab-pane label="游戏设置" name="game">
           <div class="tab-stack">
@@ -415,7 +415,7 @@
 import * as echarts from "echarts";
 import dayjs from "dayjs";
 import AppTable from "@/components/AppTable.vue";
-import PoolGroupPanel from "./PoolGroupPanel.vue";
+import PoolGroupPanel from "./PoolSchemePanel.vue";
 import {
   getExchangeConfig,
   getControlCoefficientConfig,
@@ -564,11 +564,12 @@ export default {
       return this.selectedAgentId === null ? "默认配置" : this.currentAgentName || "未选择代理";
     },
     scopeLabel() {
+      if (this.activeTab === "poolGroup") return "以下方方案范围为准";
       return this.selectedAgentId === null ? "站点默认配置" : `${this.currentSiteName || "-"} / ${this.currentAgentName || "-"}`;
     },
     activeTabMeta() {
       const metaMap = {
-        poolGroup: {title: "水池合并配置", note: "维护代理水池组，组内游戏共享水池余额。"},
+        poolGroup: {title: "水池合并配置", note: "维护默认合并方案、新代理自动同步及指定代理专属配置。"},
         game: {
           title: "游戏设置",
           note: "集中维护重置周期、水池参数和房间控制阈值。",
@@ -604,7 +605,7 @@ export default {
       return 0;
     },
     activeRecordCaption() {
-      if (this.activeTab === "poolGroup") return "当前代理的水池组数量";
+      if (this.activeTab === "poolGroup") return "当前默认方案草稿的水池组数量";
       if (this.activeTab === "game") return "当前游戏下的水池配置数";
       if (this.activeTab === "award") return "分段奖励配置条目";
       if (this.activeTab === "stock") return "库存预警相关记录";

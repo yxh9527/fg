@@ -2,7 +2,9 @@ package main
 
 import (
 	"app/config"
+	"app/poolgroup"
 	"app/tables"
+	"context"
 	"fmt"
 	"os"
 	"web-api/common"
@@ -59,6 +61,9 @@ func run(cmd *cobra.Command, args []string) {
 
 	// Init database tables and seed data.
 	tables.InitMysqlDb(dao.Mysql().Manager, dao.Mysql().Player)
+	if err := poolgroup.Migrate(dao.Mysql().Manager); err != nil {
+		panic(err)
+	}
 
 	// Load pool_config table data into Redis on startup.
 	if err := dao.SyncPoolConfigsToRedis(); err != nil {
@@ -67,6 +72,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	// Init in-memory configs from Redis.
 	dao.ConfigsInit()
+	go (poolgroup.Store{DB: dao.Mysql().Manager, Redis: dao.RedisIns().Client}).RunSchemeWorker(context.Background())
 
 	// Init Elasticsearch.
 	if err := dao.InitES(rc); err != nil {

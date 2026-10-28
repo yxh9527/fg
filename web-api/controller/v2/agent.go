@@ -1,9 +1,10 @@
-﻿package v2
+package v2
 
 import (
 	"app/entity"
 	"app/entity/view"
 	"app/esindex"
+	"app/poolgroup"
 	"app/tables/manager"
 	"context"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/olivere/elastic/v7"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 func AgentAdd(ctx *gin.Context) {
@@ -29,12 +31,15 @@ func AgentAdd(ctx *gin.Context) {
 	remarks := ctx.PostForm("remarks")
 	if len(nickName) > 50 {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Data: nil, Msg: "名称超出最大长度,只能50个字符"})
+		return
 	}
 	if len(contacts) > 50 {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Data: nil, Msg: "负责人超出最大长度,只能50个字符"})
+		return
 	}
 	if len(phone) > 50 {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Data: nil, Msg: "联系方式超出最大长度,只能50个字符"})
+		return
 	}
 	agent := &manager.Agent{
 		AesKey:      common.GenRandString(32),
@@ -63,7 +68,16 @@ func AgentAdd(ctx *gin.Context) {
 		ctx.Abort()
 		return
 	}
-	dao.Mysql().Manager.Create(agent)
+	err := dao.Mysql().Manager.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(agent).Error; err != nil {
+			return err
+		}
+		return (poolgroup.Store{DB: tx, Redis: dao.RedisIns().Client}).RegisterAgent(tx, *agent)
+	})
+	if err != nil {
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusBadRequest, Msg: "创建代理或初始化水池任务失败：" + err.Error()})
+		return
+	}
 	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Data: nil, Msg: "操作成功"})
 }
 

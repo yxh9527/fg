@@ -272,6 +272,10 @@ func poolGroupSubmit(c *gin.Context, kind string) {
 	}
 	input := request.Intent
 	input.AgentID = *request.AgentID
+	if input.AgentID > 0 {
+		poolGroupResponse(c, nil, errors.New("正式代理请通过水池合并方案的指定代理入口维护专属配置"))
+		return
+	}
 	input.Kind = kind
 	poollog.Event(zap.InfoLevel, "v2.poolGroupSubmit", "request_validated", "收到水池组配置操作请求", append(poollog.MetadataFields(input), zap.Int64("operatorId", c.GetInt64("id")))...)
 	op, err := groupStore().Submit(c.Request.Context(), input, c.GetInt64("id"))
