@@ -1,16 +1,17 @@
 import { request } from "@/libs/request";
 import { getToken } from "@/libs/util";
+import { tracePoolGroupCall } from "@/libs/poolGroupLog";
 
 const mergeData = (items) => ({
   token: getToken(),
   ...Object.assign({}, ...(items || [])),
 });
 
-export const getPoolGroups = (params) => request({url: 'v2/govern/pool-groups', method: 'get', params: {token: getToken(), ...params}});
-export const getPoolGroupGames = (params) => request({url: 'v2/govern/pool-groups/games', method: 'get', params: {token: getToken(), ...params}});
-export const createPoolGroup = (data) => request({url: 'v2/govern/pool-groups/create', method: 'post', params: {token: getToken()}, data});
-export const updatePoolGroup = (data) => request({url: 'v2/govern/pool-groups/update', method: 'post', params: {token: getToken()}, data});
-export const deletePoolGroup = (data) => request({url: 'v2/govern/pool-groups/delete', method: 'post', params: {token: getToken()}, data});
+export const getPoolGroups = (params) => tracePoolGroupCall('api.getPoolGroups', () => request({url: 'v2/govern/pool-groups', method: 'get', params: {token: getToken(), ...params}}), params);
+export const getPoolGroupGames = (params) => tracePoolGroupCall('api.getPoolGroupGames', () => request({url: 'v2/govern/pool-groups/games', method: 'get', params: {token: getToken(), ...params}}), params);
+export const createPoolGroup = (data) => tracePoolGroupCall('api.createPoolGroup', () => request({url: 'v2/govern/pool-groups/create', method: 'post', params: {token: getToken()}, data}), data, 'info');
+export const updatePoolGroup = (data) => tracePoolGroupCall('api.updatePoolGroup', () => request({url: 'v2/govern/pool-groups/update', method: 'post', params: {token: getToken()}, data}), data, 'info');
+export const deletePoolGroup = (data) => tracePoolGroupCall('api.deletePoolGroup', () => request({url: 'v2/govern/pool-groups/delete', method: 'post', params: {token: getToken()}, data}), data, 'info');
 
 export const getReportData = (items) =>
   request({

@@ -70,10 +70,11 @@
 
 <script>
 import dayjs from 'dayjs';
+import { withPoolGroupLogs } from '@/libs/poolGroupLog';
 import { getPoolGroups, getPoolGroupGames, createPoolGroup, updatePoolGroup, deletePoolGroup } from '@/api/data';
 
 const freshForm = () => ({ groupId: 0, version: 0, name: '', symbols: [], sourceSymbol: '', config: null });
-export default {
+export default withPoolGroupLogs({
   name: 'PoolGroupPanel',
   props: { agentId: { default: null }, siteId: { default: null }, games: { type: Array, default: () => [] } },
   data() { return { groups: [], operations: [], availableGames: [], loading: false, saving: false, loadError: '', dialogVisible: false, form: freshForm(), selectionOrder: [], pollTimer: null, sequence: 0, disposed: false, lastSignature: '', requestId: '', revision: null,
@@ -145,7 +146,7 @@ export default {
   },
   mounted() { this.fetchGroups(); },
   beforeDestroy() { this.disposed = true; this.sequence++; clearTimeout(this.pollTimer); },
-};
+});
 </script>
 
 <style scoped>

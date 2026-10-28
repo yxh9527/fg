@@ -8,6 +8,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"testing"
 )
 
@@ -49,6 +51,9 @@ func exists(t *testing.T, s Store, ctx context.Context, agent int64, symbol stri
 }
 
 func TestApplyCreateClearsOriginalPoolsButNotOtherAgent(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	restore := zap.ReplaceGlobals(zap.New(core))
+	t.Cleanup(restore)
 	s, ctx, lease := testStore(t)
 	seed(t, s, ctx, 7, "a", 30)
 	seed(t, s, ctx, 7, "b", 40)
@@ -64,6 +69,19 @@ func TestApplyCreateClearsOriginalPoolsButNotOtherAgent(t *testing.T) {
 	exists(t, s, ctx, 8, "a", true)
 	if len(state.Groups) != 1 || !state.Groups[0].Config.Pool[1].Base.Equal(decimal.NewFromInt(100)) {
 		t.Fatal("new pool must start at its copied base")
+	}
+	matched := false
+	for _, entry := range logs.All() {
+		fields := entry.ContextMap()
+		if fields["stage"] == "redis_applied" {
+			matched = true
+			if fields["deletedRecordCount"] != int64(8) {
+				t.Fatal("log does not report actual Redis deletion count", fields)
+			}
+		}
+	}
+	if !matched {
+		t.Fatal("missing Redis applied stage log")
 	}
 }
 func TestApplyMembershipEditPreservesGroupCountersAndConfig(t *testing.T) {

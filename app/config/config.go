@@ -1,11 +1,12 @@
 package config
 
 import (
+	"app/poollog"
 	"app/tables/manager"
 	"fmt"
-	"sync"
-
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
+	"sync"
 )
 
 var CfgIns *Configs = nil
@@ -38,7 +39,6 @@ type RunConfig struct {
 	ServerPort int    `yaml:"server_port"`
 	Log        string `yaml:"log"`
 }
-
 type PoolItem struct {
 	Min        decimal.Decimal `json:"min"`
 	Normal     decimal.Decimal `json:"normal"`
@@ -50,7 +50,6 @@ type PoolItem struct {
 	Revenue    decimal.Decimal `json:"revenue"`
 	Base       decimal.Decimal `json:"base"`
 }
-
 type Pool struct {
 	Symbol string              `json:"symbol"`
 	Name   string              `json:"name"`
@@ -75,27 +74,35 @@ type OddsItem struct {
 // 当Min==Max == 0时表示默认配置
 // 配置算法 “其他情况时单控不介入” 流程
 type AwardOddsConfigItem struct {
-	Id       int64           `json:"id"`        //id
-	Name     string          `json:"name"`      //名字
-	Min      decimal.Decimal `json:"min"`       //盈亏比最小值 百分比
-	Max      decimal.Decimal `json:"max"`       //盈亏比最大值 百分比
-	PoolOdds []*OddsItem     `json:"pool_odds"` //中奖概率 低、中、高 水位开奖概率 百分比
-}
+	Id int64 `json:"id"` //id
 
+	Name string `json:"name"` //名字
+
+	Min decimal.Decimal `json:"min"` //盈亏比最小值 百分比
+
+	Max decimal.Decimal `json:"max"` //盈亏比最大值 百分比
+
+	PoolOdds []*OddsItem `json:"pool_odds"` //中奖概率 低、中、高 水位开奖概率 百分比
+
+}
 type AwardConfig struct {
 	OddsConfig []*AwardOddsConfigItem `json:"award_config"` //key==> AwardOddsConfigItem.min-AwardOddsConfigItem.max 组成的字符串
-	GameId     int64                  `json:"gameId"`
-	Symbol     string                 `json:"symbol"`
-}
 
+	GameId int64  `json:"gameId"`
+	Symbol string `json:"symbol"`
+}
 type AutoCtrlItem struct {
-	TotalEffect       decimal.Decimal `json:"totalEffect"`       // 打吗
-	TotalProfLoss     decimal.Decimal `json:"totalProfLoss"`     //yk
-	TotalProfLossRate decimal.Decimal `json:"totalProfLossRate"` //ykb
-	ControlRate       decimal.Decimal `json:"controlRate"`       //kz比例
-	Score             decimal.Decimal `json:"score"`             //kz积分
-}
+	TotalEffect decimal.Decimal `json:"totalEffect"` // 打吗
 
+	TotalProfLoss decimal.Decimal `json:"totalProfLoss"` //yk
+
+	TotalProfLossRate decimal.Decimal `json:"totalProfLossRate"` //ykb
+
+	ControlRate decimal.Decimal `json:"controlRate"` //kz比例
+
+	Score decimal.Decimal `json:"score"` //kz积分
+
+}
 type AutoCtrlMgr struct {
 	Ctrls []*AutoCtrlItem
 }
@@ -108,7 +115,6 @@ type ControlCoefficientRange struct {
 	Max         decimal.Decimal `json:"max"`
 	Coefficient decimal.Decimal `json:"coefficient"`
 }
-
 type ControlCoefficientConfig struct {
 	Bet          []*ControlCoefficientRange `json:"bet"`
 	Single       []*ControlCoefficientRange `json:"single"`
@@ -116,52 +122,27 @@ type ControlCoefficientConfig struct {
 }
 
 func DefaultControlCoefficientConfig() *ControlCoefficientConfig {
-	return &ControlCoefficientConfig{
-		Bet: []*ControlCoefficientRange{
-			{Min: decimal.Zero, Max: decimal.RequireFromString("0.5"), Coefficient: decimal.RequireFromString("0.25")},
-			{Min: decimal.RequireFromString("0.5"), Max: decimal.NewFromInt(2), Coefficient: decimal.RequireFromString("0.5")},
-			{Min: decimal.NewFromInt(2), Max: decimal.NewFromInt(4), Coefficient: decimal.RequireFromString("0.6")},
-			{Min: decimal.NewFromInt(4), Max: decimal.NewFromInt(8), Coefficient: decimal.RequireFromString("0.9")},
-			{Min: decimal.NewFromInt(8), Max: decimal.Zero, Coefficient: decimal.NewFromInt(1)},
-		},
-		Single: []*ControlCoefficientRange{
-			{Min: decimal.NewFromInt(1), Coefficient: decimal.RequireFromString("0.9")},
-			{Min: decimal.NewFromInt(2), Coefficient: decimal.RequireFromString("0.8")},
-			{Min: decimal.NewFromInt(3), Coefficient: decimal.RequireFromString("0.7")},
-			{Min: decimal.NewFromInt(4), Coefficient: decimal.RequireFromString("0.6")},
-			{Min: decimal.NewFromInt(5), Coefficient: decimal.RequireFromString("0.5")},
-			{Min: decimal.NewFromInt(6), Coefficient: decimal.RequireFromString("0.4")},
-			{Min: decimal.NewFromInt(7), Coefficient: decimal.RequireFromString("0.35")},
-			{Min: decimal.NewFromInt(8), Coefficient: decimal.RequireFromString("0.3")},
-			{Min: decimal.NewFromInt(9), Coefficient: decimal.RequireFromString("0.25")},
-		},
-		SingleRounds: decimal.NewFromInt(500),
-	}
+	return &ControlCoefficientConfig{Bet: []*ControlCoefficientRange{{Min: decimal.Zero, Max: decimal.RequireFromString("0.5"), Coefficient: decimal.RequireFromString("0.25")}, {Min: decimal.RequireFromString("0.5"), Max: decimal.NewFromInt(2), Coefficient: decimal.RequireFromString("0.5")}, {Min: decimal.NewFromInt(2), Max: decimal.NewFromInt(4), Coefficient: decimal.RequireFromString("0.6")}, {Min: decimal.NewFromInt(4), Max: decimal.NewFromInt(8), Coefficient: decimal.RequireFromString("0.9")}, {Min: decimal.NewFromInt(8), Max: decimal.Zero, Coefficient: decimal.NewFromInt(1)}}, Single: []*ControlCoefficientRange{{Min: decimal.NewFromInt(1), Coefficient: decimal.RequireFromString("0.9")}, {Min: decimal.NewFromInt(2), Coefficient: decimal.RequireFromString("0.8")}, {Min: decimal.NewFromInt(3), Coefficient: decimal.RequireFromString("0.7")}, {Min: decimal.NewFromInt(4), Coefficient: decimal.RequireFromString("0.6")}, {Min: decimal.NewFromInt(5), Coefficient: decimal.RequireFromString("0.5")}, {Min: decimal.NewFromInt(6), Coefficient: decimal.RequireFromString("0.4")}, {Min: decimal.NewFromInt(7), Coefficient: decimal.RequireFromString("0.35")}, {Min: decimal.NewFromInt(8), Coefficient: decimal.RequireFromString("0.3")}, {Min: decimal.NewFromInt(9), Coefficient: decimal.RequireFromString("0.25")}}, SingleRounds: decimal.NewFromInt(500)}
 }
 
 // pool配置管理
-type PoolMgr struct {
-	//key:symbol
+type PoolMgr struct { //key:symbol
 	Default map[string]*Pool
 	//key:agentId-symbol
 	Agent map[string]*Pool
 }
 
 // pool配置管理
-type AwardMgr struct {
-	//key symbol
+type AwardMgr struct { //key symbol
 	Data map[string]*AwardConfig
 }
-
 type CurrencyMgr struct {
 	Data map[string]decimal.Decimal `json:"currency"`
 }
-
 type GatewaysMgr struct {
 	Urls       []*manager.ApiConfig
 	UpdateTime int64
 }
-
 type Configs struct {
 	Lock        *sync.RWMutex
 	PoolGroups  map[int64][]*PoolGroupSnapshot
@@ -179,56 +160,46 @@ func (cfg *Configs) SetGatewayCfg(c *GatewaysMgr) {
 	defer cfg.Lock.Unlock()
 	cfg.Gateway = c
 }
-
 func (cfg *Configs) GetGatewayCfg() GatewaysMgr {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	return *cfg.Gateway
 }
-
 func (cfg *Configs) SetSystemConfig(c *SystemConfig) {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	cfg.System = c
 }
-
 func (cfg *Configs) GetSystemConfig() SystemConfig {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	return *cfg.System
 }
-
 func (cfg *Configs) SetDefaultPool(symbol string, cm *Pool) {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	cfg.Pool.Default[symbol] = cm
 }
-
 func (cfg *Configs) SetAgentPool(agentId string, cm *Pool) {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
-
 	cfg.Pool.Agent[fmt.Sprintf("%s-%s", agentId, cm.Symbol)] = cm
 }
-
 func (cfg *Configs) SetCurrency(cm *CurrencyMgr) {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	cfg.Currency = cm
 }
-
 func (cfg *Configs) SetAutoCtrl(ac *AutoCtrlMgr) {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	cfg.AC = ac
 }
-
 func (cfg *Configs) SetControlCoefficient(c *ControlCoefficientConfig) {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	cfg.Coefficient = c
 }
-
 func (cfg *Configs) IsSingleControlEnabled(roundCount decimal.Decimal) bool {
 	cfg.Lock.RLock()
 	c := cfg.Coefficient
@@ -238,14 +209,11 @@ func (cfg *Configs) IsSingleControlEnabled(roundCount decimal.Decimal) bool {
 	}
 	return roundCount.GreaterThan(c.SingleRounds)
 }
-
 func (cfg *Configs) SetCtrl(symbol string, ac *AwardConfig) {
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
-
 	cfg.Award.Data[symbol] = ac
 }
-
 func (cfg *Configs) GetAutoCtrl(effectBet, profitLoss decimal.Decimal) *AutoCtrlItem {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
@@ -258,9 +226,7 @@ func (cfg *Configs) GetAutoCtrl(effectBet, profitLoss decimal.Decimal) *AutoCtrl
 		if v == nil {
 			continue
 		}
-		if v.TotalEffect.LessThanOrEqual(effectBet) &&
-			v.TotalProfLoss.LessThanOrEqual(profitLoss) &&
-			v.TotalProfLossRate.LessThanOrEqual(rate) {
+		if v.TotalEffect.LessThanOrEqual(effectBet) && v.TotalProfLoss.LessThanOrEqual(profitLoss) && v.TotalProfLossRate.LessThanOrEqual(rate) {
 			if validAsc == nil {
 				validAsc = v
 			} else if validAsc.ControlRate.Abs().LessThan(v.ControlRate.Abs()) {
@@ -270,7 +236,6 @@ func (cfg *Configs) GetAutoCtrl(effectBet, profitLoss decimal.Decimal) *AutoCtrl
 	}
 	return validAsc
 }
-
 func (cfg *Configs) GetControlCoefficient(averageBet, effectBet, profitLoss, roundCount decimal.Decimal, singleControl bool) decimal.Decimal {
 	cfg.Lock.RLock()
 	c := cfg.Coefficient
@@ -302,14 +267,24 @@ func (cfg *Configs) GetControlCoefficient(averageBet, effectBet, profitLoss, rou
 	}
 	return coefficient
 }
-
-func (cfg *Configs) GetPoolCfg(agentId int64, symbol string) *Pool {
+func (cfg *Configs) GetPoolCfg(agentId int64, symbol string) (poolLogResult0 *Pool) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentId))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.BeginDebug("config.Configs.GetPoolCfg", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
 	return cfg.effectivePoolLocked(agentId, symbol)
 }
-
-func (cfg *Configs) effectivePoolLocked(agentId int64, symbol string) *Pool {
+func (cfg *Configs) effectivePoolLocked(agentId int64, symbol string) (poolLogResult0 *Pool) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentId))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.BeginDebug("config.Configs.effectivePoolLocked", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	if group := cfg.poolGroupLocked(agentId, symbol); group != nil {
 		if original := cfg.independentPoolLocked(agentId, symbol); original != nil {
 			copy := *original
@@ -320,7 +295,6 @@ func (cfg *Configs) effectivePoolLocked(agentId int64, symbol string) *Pool {
 	}
 	return cfg.independentPoolLocked(agentId, symbol)
 }
-
 func (cfg *Configs) GetPoolDefaultCfg(symbol string) *Pool {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
@@ -329,8 +303,13 @@ func (cfg *Configs) GetPoolDefaultCfg(symbol string) *Pool {
 	}
 	return cfg.Pool.Default[symbol]
 }
-
-func (cfg *Configs) GetPoolCfgByGameId(agentId, gameId int64) *Pool {
+func (cfg *Configs) GetPoolCfgByGameId(agentId, gameId int64) (poolLogResult0 *Pool) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentId))
+	poolLogFields = append(poolLogFields, zap.Int64("gameId", gameId))
+	poolLogTrace := poollog.BeginDebug("config.Configs.GetPoolCfgByGameId", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
 	if cfg.Pool == nil {
@@ -348,7 +327,6 @@ func (cfg *Configs) GetPoolCfgByGameId(agentId, gameId int64) *Pool {
 	}
 	return nil
 }
-
 func (cfg *Configs) GetPoolDefaultCfgByGameId(gameId int64) *Pool {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
@@ -362,14 +340,12 @@ func (cfg *Configs) GetPoolDefaultCfgByGameId(gameId int64) *Pool {
 	}
 	return nil
 }
-
 func (cfg *Configs) GetExchange(currencyType string) (decimal.Decimal, bool) {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
 	exchange, ok := cfg.Currency.Data[currencyType]
 	return exchange, ok
 }
-
 func (cfg *Configs) GetAwardOddsSingleCtrlConfig(symbol string) *AwardOddsConfigItem {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
@@ -383,7 +359,6 @@ func (cfg *Configs) GetAwardOddsSingleCtrlConfig(symbol string) *AwardOddsConfig
 	}
 	return res
 }
-
 func (cfg *Configs) GetAwardOddsDefaultCtrlConfig(symbol string) *AwardOddsConfigItem {
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
@@ -423,7 +398,6 @@ type DataItem struct {
 	Eff     decimal.Decimal `json:"bet"`
 	Pro     decimal.Decimal `json:"win"`
 }
-
 type RankResult struct {
 	AgentId uint32
 	UserId  uint32

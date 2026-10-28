@@ -5,11 +5,17 @@ const vm = require('node:vm');
 const compiler = require('vue-template-compiler');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../src/views/control/PoolGroupPanel.vue'), 'utf8');
 const component = compiler.parseComponent(source);
+function loadLogging(events = []) {
+  const loggingSource = fs.readFileSync(require('node:path').join(__dirname, '../src/libs/poolGroupLog.js'), 'utf8');
+  const sandbox = {module:{exports:{}},Date,console:Object.fromEntries(['debug','info','error'].map(level=>[level,(...args)=>events.push({level,args})]))};
+  vm.runInNewContext(loggingSource.replace(/^export /gm, '') + '\nmodule.exports = { tracePoolGroupCall, withPoolGroupLogs };', sandbox);
+  return sandbox.module.exports;
+}
 
 function instance(overrides = {}) {
   const emitted = [];
   const api = { getPoolGroups: async () => ({data:{data:{groups:[],operations:[],revision:0}}}), getPoolGroupGames: async () => ({data:{data:[]}}), createPoolGroup: async () => ({}), updatePoolGroup: async () => ({}), deletePoolGroup: async () => ({}) , ...overrides };
-  const sandbox = {module:{exports:{}},dayjs:require('dayjs'),window:{crypto:require('node:crypto').webcrypto},Uint32Array,setTimeout:()=>1,clearTimeout:()=>{},...api};
+  const sandbox = {module:{exports:{}},dayjs:require('dayjs'),window:{crypto:require('node:crypto').webcrypto},Uint32Array,setTimeout:()=>1,clearTimeout:()=>{},...api,...loadLogging()};
   const script = component.script.content.replace(/^import .*;$/gm, '').replace('export default', 'module.exports =');
   vm.runInNewContext(script, sandbox, {filename:'PoolGroupPanel.vue'});
   const options = sandbox.module.exports;
@@ -39,4 +45,12 @@ test('invalid empty or over-limit membership never reaches API', async () => {
 });
 test('stale agent response cannot overwrite current agent results', async () => {
   let finish;const {model}=instance({getPoolGroups:()=>new Promise(resolve=>{finish=resolve;})});const waiting=model.fetchGroups();model.agentId=8;model.sequence++;model.groups=[{id:88}];finish({data:{data:{groups:[{id:77}],operations:[],revision:1}}});await waiting;assert.equal(model.groups[0].id,88);
+});
+test('method logging records correlation and duration without tokens or raw payload', async () => {
+  const events=[];const {tracePoolGroupCall}=loadLogging(events);const result=await tracePoolGroupCall('api.createPoolGroup',async()=>123,{agentId:7,requestId:'r1',token:'secret-token',payload:'raw-private-body'},'info');
+  assert.equal(result,123);assert.equal(events[0].args[1].stage,'entry');assert.equal(events[1].args[1].stage,'exit');assert.equal(events[1].args[1].agentId,7);assert.equal(typeof events[1].args[1].elapsedMs,'number');assert.ok(!JSON.stringify(events).includes('secret-token'));assert.ok(!JSON.stringify(events).includes('raw-private-body'));
+});
+test('failure logging preserves the original error and omits axios request config', async () => {
+  const events=[];const {tracePoolGroupCall}=loadLogging(events);const failure={message:'network failed',response:{status:503},config:{params:{token:'secret-token'}}};
+  await assert.rejects(tracePoolGroupCall('api.updatePoolGroup',async()=>{throw failure;},{agentId:7}),error=>error===failure);assert.equal(events.at(-1).level,'error');assert.equal(events.at(-1).args[1].status,503);assert.ok(!JSON.stringify(events).includes('secret-token'));
 });

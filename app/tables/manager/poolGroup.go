@@ -1,5 +1,10 @@
 package manager
 
+import (
+	"app/poollog"
+	"go.uber.org/zap"
+)
+
 // PoolGroup stores the applied definition. Changes are staged in PoolGroupOperation.
 type PoolGroup struct {
 	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
@@ -13,7 +18,12 @@ type PoolGroup struct {
 	UpdatedAt    int64  `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
-func (PoolGroup) TableName() string { return "pool_group" }
+func (PoolGroup) TableName() (poolLogResult0 string) {
+	poolLogFields := []zap.Field{}
+	poolLogTrace := poollog.BeginDebug("manager.PoolGroup.TableName", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
+	return "pool_group"
+}
 
 type PoolGroupMember struct {
 	ID       int64  `gorm:"primaryKey;autoIncrement" json:"id"`
@@ -23,7 +33,12 @@ type PoolGroupMember struct {
 	Position int    `gorm:"not null" json:"position"`
 }
 
-func (PoolGroupMember) TableName() string { return "pool_group_member" }
+func (PoolGroupMember) TableName() (poolLogResult0 string) {
+	poolLogFields := []zap.Field{}
+	poolLogTrace := poollog.BeginDebug("manager.PoolGroupMember.TableName", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
+	return "pool_group_member"
+}
 
 // Request IDs are unique per agent. Payload contains the complete immutable intent.
 type PoolGroupOperation struct {
@@ -41,4 +56,9 @@ type PoolGroupOperation struct {
 	UpdatedAt  int64  `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
-func (PoolGroupOperation) TableName() string { return "pool_group_operation" }
+func (PoolGroupOperation) TableName() (poolLogResult0 string) {
+	poolLogFields := []zap.Field{}
+	poolLogTrace := poollog.BeginDebug("manager.PoolGroupOperation.TableName", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
+	return "pool_group_operation"
+}

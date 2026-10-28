@@ -1,7 +1,9 @@
 package config
 
 import (
+	"app/poollog"
 	"fmt"
+	"go.uber.org/zap"
 	"strings"
 )
 
@@ -21,9 +23,17 @@ type PoolGroupSnapshot struct {
 	UpdatedAt    int64    `json:"updatedAt"`
 }
 
-func PoolGroupSymbol(id int64) string { return fmt.Sprintf("%s%d", PoolGroupSymbolPrefix, id) }
-
-func ValidatePoolGroup(name string, symbols []string) error {
+func PoolGroupSymbol(id int64) (poolLogResult0 string) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, zap.Int64("id", id))
+	poolLogTrace := poollog.BeginDebug("config.PoolGroupSymbol", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
+	return fmt.Sprintf("%s%d", PoolGroupSymbolPrefix, id)
+}
+func ValidatePoolGroup(name string, symbols []string) (poolLogResult0 error) {
+	poolLogFields := []zap.Field{}
+	poolLogTrace := poollog.Begin("config.ValidatePoolGroup", zap.DebugLevel, poolLogFields...)
+	defer poolLogTrace.Finish(&poolLogResult0)
 	if strings.TrimSpace(name) == "" || len([]rune(name)) > 100 {
 		return fmt.Errorf("组名称不能为空且不能超过100个字符")
 	}
@@ -42,8 +52,12 @@ func ValidatePoolGroup(name string, symbols []string) error {
 	}
 	return nil
 }
-
 func (cfg *Configs) ReplacePoolGroups(agentID int64, groups []*PoolGroupSnapshot) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
+	poolLogTrace := poollog.BeginDebug("config.Configs.ReplacePoolGroups", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	cfg.Lock.Lock()
 	defer cfg.Lock.Unlock()
 	if cfg.PoolGroups == nil {
@@ -51,8 +65,13 @@ func (cfg *Configs) ReplacePoolGroups(agentID int64, groups []*PoolGroupSnapshot
 	}
 	cfg.PoolGroups[agentID] = groups
 }
-
-func (cfg *Configs) poolGroupLocked(agentID int64, symbol string) *PoolGroupSnapshot {
+func (cfg *Configs) poolGroupLocked(agentID int64, symbol string) (poolLogResult0 *PoolGroupSnapshot) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.BeginDebug("config.Configs.poolGroupLocked", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	for _, group := range cfg.PoolGroups[agentID] {
 		if symbol == PoolGroupSymbol(group.ID) {
 			return group
@@ -65,14 +84,24 @@ func (cfg *Configs) poolGroupLocked(agentID int64, symbol string) *PoolGroupSnap
 	}
 	return nil
 }
-
-func (cfg *Configs) GetPoolGroup(agentID int64, symbol string) *PoolGroupSnapshot {
+func (cfg *Configs) GetPoolGroup(agentID int64, symbol string) (poolLogResult0 *PoolGroupSnapshot) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.BeginDebug("config.Configs.GetPoolGroup", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
 	return cfg.poolGroupLocked(agentID, symbol)
 }
-
-func (cfg *Configs) PoolStorageSymbol(agentID int64, symbol string) string {
+func (cfg *Configs) PoolStorageSymbol(agentID int64, symbol string) (poolLogResult0 string) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.BeginDebug("config.Configs.PoolStorageSymbol", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	if group := cfg.GetPoolGroup(agentID, symbol); group != nil {
 		return PoolGroupSymbol(group.ID)
 	}
@@ -80,13 +109,24 @@ func (cfg *Configs) PoolStorageSymbol(agentID int64, symbol string) string {
 }
 
 // GetIndependentPoolCfg deliberately bypasses grouping, e.g. when a game leaves a group.
-func (cfg *Configs) GetIndependentPoolCfg(agentID int64, symbol string) *Pool {
+func (cfg *Configs) GetIndependentPoolCfg(agentID int64, symbol string) (poolLogResult0 *Pool) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.BeginDebug("config.Configs.GetIndependentPoolCfg", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	cfg.Lock.RLock()
 	defer cfg.Lock.RUnlock()
 	return cfg.independentPoolLocked(agentID, symbol)
 }
-
-func (cfg *Configs) independentPoolLocked(agentID int64, symbol string) *Pool {
+func (cfg *Configs) independentPoolLocked(agentID int64, symbol string) (poolLogResult0 *Pool) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(cfg)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.BeginDebug("config.Configs.independentPoolLocked", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	if cfg.Pool == nil {
 		return nil
 	}

@@ -3,6 +3,7 @@ package rpc
 import (
 	"app/config"
 	"app/poolgroup"
+	"app/poollog"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,6 +34,10 @@ type sessionChange struct {
 }
 
 func poolRequestSession(req interface{}) (key string, newBet bool) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(req)...)
+	poolLogTrace := poollog.BeginDebug("rpc.poolRequestSession", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	switch r := req.(type) {
 	case *services.SlotsDoBetReq:
 		return dao.PoolSessionKey("slots", r.UserId, r.GameId, r.CurrencyType, ""), true
@@ -56,7 +62,12 @@ func poolRequestSession(req interface{}) (key string, newBet bool) {
 }
 
 // poolGroupInterceptor serializes each agent across lottery instances and refreshes the applied mapping on every call.
-func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (poolLogResult0 interface{}, poolLogResult1 error) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(req)...)
+	poolLogFields = append(poolLogFields, zap.String("rpcMethod", info.FullMethod))
+	poolLogTrace := poollog.Begin("rpc.poolGroupInterceptor", zap.DebugLevel, poolLogFields...)
+	defer poolLogTrace.Finish(&poolLogResult1)
 	identity, ok := req.(poolRequestIdentity)
 	if !ok {
 		return handler(ctx, req)
@@ -67,10 +78,12 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 	defer cancel()
 	lease, err := poolgroup.Acquire(acquireCtx, rdb, agentID)
 	if err != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "poolgroup.Acquire", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return nil, status.Error(codes.Unavailable, "水池正忙，请重试")
 	}
 	defer lease.Close()
 	if err = dao.BeginPoolRequest(ctx, agentID); err != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "dao.BeginPoolRequest", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return nil, status.Error(codes.Unavailable, err.Error())
 	}
 	if _, ok := req.(*services.PoolAmountResultReq); ok {
@@ -84,6 +97,9 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 	sessionsKey := poolgroup.Key(agentID, "sessions")
 	oldRaw, err := rdb.HGet(ctx, sessionsKey, sessionKey).Bytes()
 	if err != nil && !errors.Is(err, redis.Nil) {
+		if err != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "rdb.HGet.Bytes", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
+		}
 		return nil, status.Error(codes.Unavailable, "读取活动订单失败")
 	}
 	var old *dao.PoolSession
@@ -94,11 +110,15 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 		}
 	}
 	if old != nil && old.PoolSymbol != "" && old.PoolSymbol != config.CfgIns.PoolStorageSymbol(agentID, game.ConfName) {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "pool_identity_mismatch", "未结算订单原池与当前路由不一致", append(poolLogFields, zap.String("originalPool", old.PoolSymbol), zap.String("currentPool", config.CfgIns.PoolStorageSymbol(agentID, game.ConfName)))...)
 		return nil, status.Error(codes.FailedPrecondition, "未结算订单的原水池与当前配置不一致")
 	}
 	// Pending operations pause new bets but never block a recorded continuation or settlement.
 	pendingRaw, err := rdb.Get(ctx, poolgroup.Key(agentID, "pending")).Bytes()
 	if err != nil && !errors.Is(err, redis.Nil) {
+		if err != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "rdb.Get.Bytes", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
+		}
 		return nil, status.Error(codes.Unavailable, "读取水池切换状态失败")
 	}
 	pending := 0
@@ -112,11 +132,15 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 		}
 	}
 	if pending > 0 && newBet && old == nil {
+		poolLogTrace.WarnOnError()
+		poollog.Event(zap.WarnLevel, "rpc.poolGroupInterceptor", "new_bet_blocked", "水池切换门禁阻止新下注", poolLogFields...)
 		return nil, status.Error(codes.Unavailable, "水池切换中，暂不接受新下注")
 	}
 	if pending > 0 && newBet {
 		switch req.(type) {
 		case *services.FruitDoBetMultiReq, *services.SlotsDoBetReq:
+			poolLogTrace.WarnOnError()
+			poollog.Event(zap.WarnLevel, "rpc.poolGroupInterceptor", "continuation_required", "切换期间仅允许当前局结算，不允许新增投注", poolLogFields...)
 			return nil, status.Error(codes.Unavailable, "水池切换中，请先完成当前局")
 		}
 	}
@@ -139,12 +163,14 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 	}
 	seen, err := rdb.Exists(ctx, trackerKey).Result()
 	if err != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "rdb.Exists.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return nil, status.Error(codes.Unavailable, "读取订单跟踪失败")
 	}
 	primaryDone := false
 	if primaryKey != "" {
 		primaryDone, err = poolIdempotencyDone(ctx, rdb, primaryKey)
 		if err != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "poolIdempotencyDone", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return nil, status.Error(codes.Unavailable, "读取结算幂等状态失败")
 		}
 		if !primaryDone {
@@ -155,6 +181,7 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 	if repeatable {
 		b := make([]byte, 16)
 		if _, err = rand.Read(b); err != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "rand.Read", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return nil, err
 		}
 		token = hex.EncodeToString(b)
@@ -162,6 +189,7 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 	inflightKey := poolgroup.Key(agentID, "inflight")
 	uncertain, readErr := rdb.HGetAll(ctx, inflightKey).Result()
 	if readErr != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "rdb.HGetAll.Result", "水池步骤失败", append(poolLogFields, zap.Error(readErr))...)
 		return nil, status.Error(codes.Unavailable, "读取处理中订单失败")
 	}
 	for priorToken, priorRaw := range uncertain {
@@ -177,16 +205,20 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 			durable = true
 		}
 		if priorToken != token || (!previous.Recoverable && !durable) {
+			poolLogTrace.WarnOnError()
+			poollog.Event(zap.WarnLevel, "rpc.poolGroupInterceptor", "uncertain_order_blocked", "存在结果待核实订单，暂不执行其他资金请求", append(poolLogFields, zap.Int("inflightCount", len(uncertain)))...)
 			return nil, status.Error(codes.Unavailable, "该代理有结果待核实的订单，暂不能开始其他资金操作")
 		}
 	}
 	// Cached responses predating tracking must not resurrect an already-finished chain.
 	if primaryDone && len(uncertain) == 0 {
+		poollog.Event(zap.DebugLevel, "rpc.poolGroupInterceptor", "idempotent_replay", "命中已完成请求，不重复修改活动链", poolLogFields...)
 		seen = 1
 	}
 	inflight := map[string]interface{}{"method": info.FullMethod, "symbol": game.ConfName, "session": sessionKey, "createdAt": time.Now().Unix(), "request": json.RawMessage(raw)}
 	inflightRaw, _ := json.Marshal(inflight)
 	if err = rdb.HSet(ctx, inflightKey, token, inflightRaw).Err(); err != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "rdb.HSet.Err", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return nil, status.Error(codes.Unavailable, "登记处理中订单失败")
 	}
 	response, callErr := callPoolHandler(ctx, req, handler)
@@ -194,10 +226,12 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 	finishCtx, finishCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer finishCancel()
 	if err = dao.FlushPoolRequest(finishCtx, agentID, lease); err != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "dao.FlushPoolRequest", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return nil, status.Error(codes.Unavailable, "结算持久化结果待核实："+err.Error())
 	}
 	// Unknown outcomes retain the inflight record and prevent clearing financial data.
 	if callErr != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "callPoolHandler", "水池步骤失败", append(poolLogFields, zap.Error(callErr))...)
 		return response, callErr
 	}
 	code, ok := response.(poolResponseCode)
@@ -205,27 +239,34 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 		return nil, status.Error(codes.Internal, "unknown lottery response")
 	}
 	if code.GetCode() == services.ErrorCode_SYSTEM_ERROR && changed {
+		poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "funds_outcome_uncertain", "资金已发生变化但结算返回系统错误，保留处理中标记供核实", append(poolLogFields, zap.Int32("businessCode", int32(code.GetCode())))...)
 		return response, nil
 	}
 	if code.GetCode() == services.ErrorCode_OK {
 		if primaryKey != "" {
 			done, checkErr := poolIdempotencyDone(finishCtx, rdb, primaryKey)
 			if checkErr != nil || !done {
+				if checkErr != nil {
+					poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "poolIdempotencyDone", "水池步骤失败", append(poolLogFields, zap.Error(checkErr))...)
+				}
 				return nil, status.Error(codes.Unavailable, "结算完成标记未保存，资金结果需核实")
 			}
 		}
 		inflight["recoverable"] = true
 		data, _ := json.Marshal(inflight)
 		if err = rdb.HSet(finishCtx, inflightKey, token, data).Err(); err != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "rdb.HSet.Err", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return nil, status.Error(codes.Unavailable, "成功订单跟踪待恢复")
 		}
 	}
 	if code.GetCode() == services.ErrorCode_OK && (repeatable || seen == 0) {
 		changes, err := poolSessionChanges(req, response, old, agentID, game.ConfName, rdb)
 		if err != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "poolSessionChanges", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return nil, status.Error(codes.Unavailable, err.Error())
 		}
 		updates := make([][]string, 0, len(changes))
+		poollog.Event(zap.DebugLevel, "rpc.poolGroupInterceptor", "session_changes_ready", "已生成活动链写回操作", append(poolLogFields, zap.Int("sessionChangeCount", len(changes)))...)
 		for _, change := range changes {
 			data := ""
 			if change.Value != nil {
@@ -245,10 +286,15 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 		}
 		err = finishPoolTracking.Run(finishCtx, rdb, []string{poolgroup.Key(agentID, "lock"), sessionsKey, trackerKey, inflightKey}, lease.Token, string(data), mark, token).Err()
 		if err != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.poolGroupInterceptor", "finishPoolTracking.Run.Err", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return nil, status.Error(codes.Unavailable, "保存订单归属失败")
 		}
+		poollog.Event(zap.DebugLevel, "rpc.poolGroupInterceptor", "session_tracking_done", "活动链及完成标记已写入Redis", append(poolLogFields, zap.Int("sessionChangeCount", len(changes)))...)
 	} else if err = finishPoolTracking.Run(finishCtx, rdb, []string{poolgroup.Key(agentID, "lock"), sessionsKey, trackerKey, inflightKey}, lease.Token, "[]", "0", token).Err(); err != nil {
 		return nil, status.Error(codes.Unavailable, "完成订单跟踪失败")
+	}
+	if code.GetCode() != services.ErrorCode_OK {
+		poollog.Event(zap.WarnLevel, "rpc.poolGroupInterceptor", "business_rejected", "开奖资金请求被业务规则拒绝", append(poolLogFields, zap.Int32("businessCode", int32(code.GetCode())))...)
 	}
 	return response, nil
 }
@@ -264,7 +310,11 @@ redis.call('HDEL',KEYS[4],ARGV[4])
 return 1
 `)
 
-func primaryPoolIdempotencyKey(req interface{}) string {
+func primaryPoolIdempotencyKey(req interface{}) (poolLogResult0 string) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(req)...)
+	poolLogTrace := poollog.BeginDebug("rpc.primaryPoolIdempotencyKey", poolLogFields...)
+	defer poolLogTrace.Finish(nil)
 	switch r := req.(type) {
 	case *services.SlotsDoBetReq:
 		return buildIdempotencyKey("slotsDoBet", u32Str(r.UserId), u32Str(r.GameId), r.CurrencyType, r.RoundId)
@@ -281,31 +331,45 @@ func primaryPoolIdempotencyKey(req interface{}) string {
 	}
 	return ""
 }
-func poolIdempotencyDone(ctx context.Context, rdb redis.UniversalClient, key string) (bool, error) {
+func poolIdempotencyDone(ctx context.Context, rdb redis.UniversalClient, key string) (poolLogResult0 bool, poolLogResult1 error) {
+	poolLogFields := []zap.Field{}
+	poolLogTrace := poollog.Begin("rpc.poolIdempotencyDone", zap.DebugLevel, poolLogFields...)
+	defer poolLogTrace.Finish(&poolLogResult1)
 	raw, err := rdb.Get(ctx, key).Bytes()
 	if errors.Is(err, redis.Nil) {
 		return false, nil
 	}
 	if err != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolIdempotencyDone", "rdb.Get.Bytes", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return false, err
 	}
 	var entry idempotencyEntry
 	if err = json.Unmarshal(raw, &entry); err != nil {
+		poollog.Event(zap.ErrorLevel, "rpc.poolIdempotencyDone", "json.Unmarshal", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return false, err
 	}
 	return entry.Done, nil
 }
-
 func callPoolHandler(ctx context.Context, req interface{}, handler grpc.UnaryHandler) (response interface{}, err error) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(req)...)
+	poolLogTrace := poollog.Begin("rpc.callPoolHandler", zap.DebugLevel, poolLogFields...)
+	defer poolLogTrace.Finish(&err)
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			poollog.Event(zap.ErrorLevel, "rpc.callPoolHandler", "handler_panic", "开奖资金处理发生异常，保留原错误恢复行为", append(poollog.MetadataFields(req), zap.String("panicType", fmt.Sprintf("%T", recovered)), zap.Stack("stack"))...)
 			err = status.Error(codes.Internal, fmt.Sprintf("水池资金操作结果待核实：%v", recovered))
 		}
 	}()
 	return handler(ctx, req)
 }
-
-func poolSessionChanges(req, response interface{}, old *dao.PoolSession, agentID int64, symbol string, rdb redis.UniversalClient) ([]sessionChange, error) {
+func poolSessionChanges(req, response interface{}, old *dao.PoolSession, agentID int64, symbol string, rdb redis.UniversalClient) (poolLogResult0 []sessionChange, poolLogResult1 error) {
+	poolLogFields := []zap.Field{}
+	poolLogFields = append(poolLogFields, poollog.MetadataFields(req)...)
+	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
+	poolLogFields = append(poolLogFields, zap.String("symbol", symbol))
+	poolLogTrace := poollog.Begin("rpc.poolSessionChanges", zap.DebugLevel, poolLogFields...)
+	defer poolLogTrace.Finish(&poolLogResult1)
 	key, _ := poolRequestSession(req)
 	session := &dao.PoolSession{Symbol: symbol, PoolSymbol: config.CfgIns.PoolStorageSymbol(agentID, symbol), Amount: "0"}
 	if group := config.CfgIns.GetPoolGroup(agentID, symbol); group != nil {
@@ -385,10 +449,12 @@ func poolSessionChanges(req, response interface{}, old *dao.PoolSession, agentID
 				continue
 			}
 			if err != nil {
+				poollog.Event(zap.ErrorLevel, "rpc.poolSessionChanges", "rdb.HGet.Bytes", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 				return nil, err
 			}
 			var existing dao.PoolSession
 			if err = json.Unmarshal(raw, &existing); err != nil {
+				poollog.Event(zap.ErrorLevel, "rpc.poolSessionChanges", "json.Unmarshal", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 				return nil, err
 			}
 			amount, keep := dao.RemainingPoolSession(existing.Amount, "0", p.TotalBet)
