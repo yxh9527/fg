@@ -52,11 +52,15 @@ func poolGroupAgent(c *gin.Context) (poolLogResult0 int64, poolLogResult1 error)
 	poolLogTrace := poollog.Begin("v2.poolGroupAgent", zap.DebugLevel, poolLogFields...)
 	defer poolLogTrace.Finish(&poolLogResult1)
 	id, err := strconv.ParseInt(c.Query("agentId"), 10, 64)
-	if err != nil || id <= 0 {
+	if err != nil || id < 0 {
 		if err != nil {
 			poollog.Event(zap.ErrorLevel, "v2.poolGroupAgent", "strconv.ParseInt", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		}
 		return 0, errors.New("请先选择代理")
+	}
+	if id == 0 {
+		poollog.Event(zap.DebugLevel, "v2.poolGroupAgent", "test_agent_selected", "使用系统测试代理，不查询代理表或站点归属", zap.Int64("agentId", id))
+		return 0, nil
 	}
 	var agent manager.Agent
 	if err = dao.Mysql().Manager.Where("id = ? AND isDel = 0", id).First(&agent).Error; err != nil {
@@ -137,7 +141,19 @@ func PoolGroupList(c *gin.Context) {
 		poolGroupResponse(c, nil, err)
 		return
 	}
-	poolGroupResponse(c, gin.H{"groups": rows, "operations": operations, "revision": state.Revision}, nil)
+	// The oldest unfinished operation can be outside the recent-history window.
+	var pending manager.PoolGroupOperation
+	if err = dao.Mysql().Manager.WithContext(c.Request.Context()).Where("agent_id = ? AND status <> ?", agentID, poolgroup.Applied).Order("id ASC").Limit(1).Find(&pending).Error; err != nil {
+		poollog.Event(zap.ErrorLevel, "v2.PoolGroupList", "load_pending_operation", "读取当前阻塞水池操作失败", append(poolLogFields, zap.Error(err))...)
+		poolGroupResponse(c, nil, err)
+		return
+	}
+	var pendingOperation *manager.PoolGroupOperation
+	if pending.ID > 0 {
+		pendingOperation = &pending
+		poollog.Event(zap.DebugLevel, "v2.PoolGroupList", "pending_operation", "当前代理存在未完成的水池操作", poollog.MetadataFields(pending)...)
+	}
+	poolGroupResponse(c, gin.H{"groups": rows, "operations": operations, "pendingOperation": pendingOperation, "revision": state.Revision}, nil)
 }
 func PoolGroupDetail(c *gin.Context) {
 	poolLogFields := []zap.Field{}
@@ -226,6 +242,13 @@ func PoolGroupGames(c *gin.Context) {
 	}
 	poolGroupResponse(c, result, nil)
 }
+
+// Pointer presence distinguishes an explicit agentId:0 from an omitted/null agentId.
+type poolGroupInput struct {
+	poolgroup.Intent
+	AgentID *int64 `json:"agentId"`
+}
+
 func poolGroupSubmit(c *gin.Context, kind string) {
 	poolLogFields := []zap.Field{}
 	poolLogFields = append(poolLogFields, zap.String("httpMethod", c.Request.Method))
@@ -237,12 +260,18 @@ func poolGroupSubmit(c *gin.Context, kind string) {
 	poolLogFields = append(poolLogFields, zap.String("kind", kind))
 	poolLogTrace := poollog.Begin("v2.poolGroupSubmit", zap.InfoLevel, poolLogFields...)
 	defer poolLogTrace.Finish(nil)
-	var input poolgroup.Intent
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var request poolGroupInput
+	if err := c.ShouldBindJSON(&request); err != nil {
 		poollog.Event(zap.ErrorLevel, "v2.poolGroupSubmit", "c.ShouldBindJSON", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		poolGroupResponse(c, nil, errors.New("请求内容无效"))
 		return
 	}
+	if request.AgentID == nil {
+		poolGroupResponse(c, nil, errors.New("请明确选择代理，测试代理ID为0"))
+		return
+	}
+	input := request.Intent
+	input.AgentID = *request.AgentID
 	input.Kind = kind
 	poollog.Event(zap.InfoLevel, "v2.poolGroupSubmit", "request_validated", "收到水池组配置操作请求", append(poollog.MetadataFields(input), zap.Int64("operatorId", c.GetInt64("id")))...)
 	op, err := groupStore().Submit(c.Request.Context(), input, c.GetInt64("id"))

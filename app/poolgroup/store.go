@@ -171,7 +171,7 @@ func (s Store) Submit(ctx context.Context, input Intent, operatorID int64) (pool
 	poolLogTrace := poollog.Begin("poolgroup.Store.Submit", zap.InfoLevel, poolLogFields...)
 	defer poolLogTrace.Finish(&poolLogResult1)
 	input.Name = strings.TrimSpace(input.Name)
-	if input.AgentID <= 0 || input.RequestID == "" || len(input.RequestID) > 80 {
+	if input.AgentID < 0 || input.RequestID == "" || len(input.RequestID) > 80 {
 		return nil, errors.New("请选择有效代理并提供请求编号")
 	}
 	if input.Kind != "create" && input.Kind != "update" && input.Kind != "delete" {
@@ -189,12 +189,23 @@ func (s Store) Submit(ctx context.Context, input Intent, operatorID int64) (pool
 			return nil, err
 		}
 	}
+	// Agent zero is virtual and has no row to lock. Share its Redis lease with lottery operations.
+	if input.AgentID == 0 {
+		lease, err := Acquire(ctx, s.Redis, 0)
+		if err != nil {
+			poollog.Event(zap.ErrorLevel, "poolgroup.Store.Submit", "test_agent_lease", "获取测试代理配置操作租约失败", append(poolLogFields, zap.Error(err))...)
+			return nil, err
+		}
+		defer lease.Close()
+	}
 	var result manager.PoolGroupOperation
 	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var agent manager.Agent
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND isDel = 0", input.AgentID).First(&agent).Error; err != nil {
-			poollog.Event(zap.ErrorLevel, "poolgroup.Store.Submit", "tx.Clauses.Where.First.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-			return errors.New("代理不存在")
+		if input.AgentID > 0 {
+			var agent manager.Agent
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND isDel = 0", input.AgentID).First(&agent).Error; err != nil {
+				poollog.Event(zap.ErrorLevel, "poolgroup.Store.Submit", "tx.Clauses.Where.First.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
+				return errors.New("代理不存在")
+			}
 		}
 		var existing manager.PoolGroupOperation
 		err := tx.Where("agent_id = ? AND request_id = ?", input.AgentID, input.RequestID).First(&existing).Error

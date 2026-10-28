@@ -5,12 +5,14 @@ import (
 	"app/tables/manager"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"testing"
+	"time"
 )
 
 func testGroup(id, agent int64, symbols ...string) *config.PoolGroupSnapshot {
@@ -207,4 +209,59 @@ func TestOperationGateCoversOldAndNewMembers(t *testing.T) {
 	if json.Unmarshal(raw, &decoded) != nil || decoded.OperationID != 5 {
 		t.Fatal("gate serialization failed")
 	}
+}
+
+func TestVirtualZeroSubmitUsesSharedLeaseBeforeSQL(t *testing.T) {
+	store, ctx, _ := testStore(t)
+	lease, err := Acquire(ctx, store.Redis, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	deadline, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
+	defer cancel()
+	_, err = store.Submit(deadline, Intent{AgentID: 0, Kind: "create", RequestID: "zero-submit", Name: "zero", Symbols: []string{"a"}}, 1)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("test agent zero was rejected or bypassed the shared lease", err)
+	}
+}
+func TestZeroAgentGroupCreateEditDeleteKeepsOtherAgentsIsolated(t *testing.T) {
+	store, ctx, _ := testStore(t)
+	lease, err := Acquire(ctx, store.Redis, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	seed(t, store, ctx, 0, "a", 10)
+	seed(t, store, ctx, 0, "b", 20)
+	seed(t, store, ctx, 7, "a", 90)
+	target := testGroup(12, 0, "a")
+	state, err := store.Apply(ctx, lease, &State{}, manager.PoolGroupOperation{ID: 1, AgentID: 0, GroupID: 12, Kind: "create"}, Plan{Target: target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists(t, store, ctx, 0, "a", false)
+	exists(t, store, ctx, 7, "a", true)
+	seed(t, store, ctx, 0, config.PoolGroupSymbol(12), 75)
+	updated := *target
+	updated.Symbols = []string{"a", "b"}
+	updated.Version = 2
+	state, err = store.Apply(ctx, lease, state, manager.PoolGroupOperation{ID: 2, AgentID: 0, GroupID: 12, Kind: "update"}, Plan{Intent: Intent{Version: 1}, Target: &updated})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists(t, store, ctx, 0, "b", false)
+	score, _ := store.Redis.ZScore(ctx, StatKeys()[0], Member(0, config.PoolGroupSymbol(12))).Result()
+	if score != 75 {
+		t.Fatal("editing zero agent group reset its balance", score)
+	}
+	state, err = store.Apply(ctx, lease, state, manager.PoolGroupOperation{ID: 3, AgentID: 0, GroupID: 12, Kind: "delete"}, Plan{Intent: Intent{Version: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Groups) != 0 {
+		t.Fatal("zero agent group not deleted")
+	}
+	exists(t, store, ctx, 0, config.PoolGroupSymbol(12), false)
+	exists(t, store, ctx, 7, "a", true)
 }

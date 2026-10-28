@@ -435,7 +435,7 @@ import {
   updatePoolResetTimeRange,
   updateUserControlResetRange,
 } from "@/api/data";
-import { formatDateTime, toAmount } from "./controlHelpers";
+import { formatDateTime, toAmount, parseOptionalAgentId } from "./controlHelpers";
 
 const createPoolForm = () => ({
   key: "",
@@ -551,7 +551,7 @@ export default {
       return hit ? hit.name : "";
     },
     currentAgentName() {
-      const hit = this.agentOptions.find((item) => item.id === this.selectedAgentId);
+      const hit = this.agentOptions.find((item) => parseOptionalAgentId(item.id) === this.selectedAgentId);
       return hit ? hit.name : "";
     },
     currentGameMeta() {
@@ -759,10 +759,10 @@ export default {
       this.selectedSiteId = routeSiteId || savedSiteId || (this.siteOptions[0] && this.siteOptions[0].id) || null;
       this.syncAgentOptions(this.selectedSiteId);
 
-      const routeAgentId = Number(this.$route.query.agentId || 0);
-      const savedAgentId = Number(sessionStorage.getItem("agentVal") || 0);
-      this.selectedAgentId = routeAgentId || savedAgentId || null;
-      if (!this.agentOptions.find((item) => item.id === this.selectedAgentId)) {
+      const routeAgentId = parseOptionalAgentId(this.$route.query.agentId);
+      const savedAgentId = parseOptionalAgentId(sessionStorage.getItem("agentVal"));
+      this.selectedAgentId = routeAgentId !== null ? routeAgentId : savedAgentId;
+      if (this.selectedAgentId !== 0 && !this.agentOptions.find((item) => parseOptionalAgentId(item.id) === this.selectedAgentId)) {
         this.selectedAgentId = null;
       }
 
@@ -773,8 +773,9 @@ export default {
       sessionStorage.setItem("agentVal", this.selectedAgentId === null ? "" : this.selectedAgentId);
     },
     syncAgentOptions(siteId) {
-      const site = this.siteOptions.find((item) => item.id === siteId);
-      this.agentOptions = site ? [...(site.agentList || [])] : [];
+      const site = this.siteOptions.find((item) => Number(item.id) === Number(siteId));
+      this.agentOptions = site ? (site.agentList || []).map(item => ({ ...item, id: parseOptionalAgentId(item.id) })).filter(item => item.id !== null) : [];
+      if (!this.agentOptions.some(item => parseOptionalAgentId(item.id) === 0)) this.agentOptions.unshift({ id: 0, name: "测试代理" });
     },
     handleSiteChange(value) {
       this.selectedSiteId = value;
@@ -785,7 +786,7 @@ export default {
       this.refreshActiveTab();
     },
     handleAgentChange(value) {
-      this.selectedAgentId = value === "" || value === undefined ? null : value;
+      this.selectedAgentId = parseOptionalAgentId(value);
       sessionStorage.setItem("agentVal", this.selectedAgentId === null ? "" : this.selectedAgentId);
       this.refreshActiveTab();
     },
