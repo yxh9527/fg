@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"web-api/crontab"
 	"web-api/dao"
 
 	"github.com/gin-gonic/gin"
@@ -108,21 +109,12 @@ func PoolResetTimeRange(ctx *gin.Context) {
 
 // 设置重置周期
 func PoolResetNow(ctx *gin.Context) {
-	result := dao.RedisIns().Client.Get(context.Background(), "reset_pool_config").Val()
-	if result == "" {
-		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "系统异常", Data: nil})
-		return
-	}
-	resetConfig := &view.ResetPoolConfig{}
-	err := jsoniter.UnmarshalFromString(result, resetConfig)
+	batchID, err := crontab.TriggerPoolResetNow(ctx.Request.Context())
 	if err != nil {
-		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "系统异常", Data: nil})
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "提交直接重置失败：" + err.Error()})
 		return
 	}
-	resetConfig.Now = true
-	result, _ = jsoniter.MarshalToString(resetConfig)
-	dao.RedisIns().Client.Set(context.Background(), "reset_pool_config", result, -1)
-	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
+	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "水池重置消息已发送", Data: gin.H{"batchId": batchID}})
 }
 
 // 修改水池配置

@@ -1,10 +1,8 @@
 package crontab
 
 import (
-	"app/entity"
 	"app/entity/view"
 	"app/esindex"
-	"app/poolgroup"
 	"app/poollog"
 	"app/tables/manager"
 	"context"
@@ -17,7 +15,6 @@ import (
 	"web-api/common"
 	"web-api/dao"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/olivere/elastic/v7"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
@@ -29,46 +26,10 @@ var c *cron.Cron = nil
 func clearPool() {
 	poolLogTrace := poollog.BeginDebug("crontab.clearPool")
 	defer poolLogTrace.Finish(nil)
-	rpc := &view.ResetPoolConfig{}
-	command := dao.RedisIns().Client.Get(context.Background(), "reset_pool_config")
-	str := command.Val()
-	if err := command.Err(); err != nil {
-		poollog.Event(zap.WarnLevel, "crontab.clearPool", "schedule_read", "读取水池重置排期未成功，检查配置是否初始化或Redis连接", zap.Error(err))
-	}
-	if str != "" {
-		if err := jsoniter.UnmarshalFromString(str, rpc); err != nil {
-			poollog.Event(zap.ErrorLevel, "crontab.clearPool", "schedule_decode", "水池重置排期解析失败", zap.Error(err))
-		}
-	}
-	if rpc.ResetTime == 0 || rpc.Interval == 0 {
-		poollog.Event(zap.ErrorLevel, "crontab.clearPool", "invalid_schedule", "水池重置排期或周期无效，未触发清池", zap.Int64("resetTime", rpc.ResetTime), zap.Int("intervalDays", rpc.Interval))
-		return
-	}
-	if !rpc.Now && rpc.ResetTime > time.Now().Unix() {
-		poollog.Event(zap.DebugLevel, "crontab.clearPool", "not_due", "水池尚未到重置时间，本轮跳过", zap.Int64("resetTime", rpc.ResetTime), zap.Int("intervalDays", rpc.Interval))
-		return
-	}
-	store := poolgroup.Store{DB: dao.Mysql().Manager, Redis: dao.RedisIns().Client}
-	batchID := fmt.Sprintf("%d-%t", rpc.ResetTime, rpc.Now)
-	poollog.Event(zap.InfoLevel, "crontab.clearPool", "reset_triggered", "触发水池重置批次", zap.String("batchId", batchID), zap.Int64("resetTime", rpc.ResetTime), zap.Bool("manual", rpc.Now), zap.Int("intervalDays", rpc.Interval))
-	if err := store.QueueReset(context.Background(), batchID); err != nil {
-		poollog.Event(zap.ErrorLevel, "crontab.clearPool", "queue_failed", "创建水池重置任务失败，未更新排期", zap.String("batchId", batchID), zap.Error(err))
-		return
-	}
-	data, _ := jsoniter.MarshalToString(entity.ResetPool{BatchID: batchID})
-	message, _ := jsoniter.MarshalToString(entity.Msg{Event: "resetPool", Data: data})
-	if err := dao.RedisIns().Publish("message", message); err != nil {
-		poollog.Event(zap.ErrorLevel, "crontab.clearPool", "publish_failed", "水池重置通知失败，已持久化任务由执行器重试", zap.String("batchId", batchID), zap.Error(err))
-	} else {
-		poollog.Event(zap.InfoLevel, "crontab.clearPool", "reset_published", "重置通知已发出，等待开奖服务执行", zap.String("batchId", batchID), zap.String("channel", "message"))
-	}
-	rpc.Now = false
-	rpc.ResetTime = time.Now().Unix() + int64(rpc.Interval)*24*60*60
-	s, _ := jsoniter.MarshalToString(rpc)
-	if err := dao.RedisIns().Client.Set(context.Background(), "reset_pool_config", s, -1).Err(); err != nil {
-		poollog.Event(zap.ErrorLevel, "crontab.clearPool", "schedule_write_failed", "更新下一次水池重置排期失败", zap.String("batchId", batchID), zap.Int64("nextResetTime", rpc.ResetTime), zap.Error(err))
-	} else {
-		poollog.Event(zap.InfoLevel, "crontab.clearPool", "next_schedule_saved", "下一次水池重置排期已保存，本批次完成情况以执行记录为准", zap.String("batchId", batchID), zap.Int64("nextResetTime", rpc.ResetTime))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := triggerPoolReset(ctx, false); err != nil {
+		poollog.Event(zap.ErrorLevel, "crontab.clearPool", "reset_dispatch_failed", "水池重置触发失败，未确认清池完成", zap.Error(err))
 	}
 }
 

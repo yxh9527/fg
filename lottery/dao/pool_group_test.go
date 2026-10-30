@@ -106,7 +106,7 @@ func TestPoolFlushRejectsLostLease(t *testing.T) {
 	}
 }
 
-func TestLuck5UsesOriginalGroupPoolAndDoesNotPayTwice(t *testing.T) {
+func TestLuck5UsesDealContextAndOriginalGroupPool(t *testing.T) {
 	ctx, lease := poolTestRuntime(t)
 	if err := BeginPoolRequest(ctx, 7); err != nil {
 		t.Fatal(err)
@@ -128,18 +128,15 @@ func TestLuck5UsesOriginalGroupPoolAndDoesNotPayTwice(t *testing.T) {
 	if err = BeginPoolRequest(ctx, 7); err != nil {
 		t.Fatal(err)
 	}
-	if response, err = CacheIns().Luck5Deal(ctx, deal); err != nil || response.CurrencyCent != 9900 {
-		t.Fatal("deal replay changed wallet", response, err)
-	}
 	// The immutable round identity must survive even an unexpected mapping drift.
 	config.CfgIns.ReplacePoolGroups(7, nil)
-	settle := &Luck5Round{UserId: 1, AgentId: 7, GameId: 2, CurrencyType: "CNY", RoundId: deal.RoundId, WinCent: 50, AttemptId: "attempt", Signature: "signature", RecordJson: "{}"}
+	settle := &Luck5Round{UserId: 1, AgentId: 7, GameId: 2, CurrencyType: "CNY", RoundId: deal.RoundId, WinCent: 50, RecordJson: "{}"}
 	saveRecord := func(*Luck5Round) error { return nil }
 	if response, err = CacheIns().Luck5Settle(ctx, settle, saveRecord); err != nil || !response.Ret || response.CurrencyCent != 9950 {
 		t.Fatal("settle failed", response, err)
 	}
-	if response, err = CacheIns().Luck5Settle(ctx, settle, saveRecord); err != nil || response.CurrencyCent != 9950 {
-		t.Fatal("settle replay paid twice", response, err)
+	if exists, err := RedisIns().cli.Exists(ctx, luck5Key(deal.RoundId)).Result(); err != nil || exists != 0 {
+		t.Fatal("completed context was retained", exists, err)
 	}
 	if err = FlushPoolRequest(ctx, 7, lease); err != nil {
 		t.Fatal(err)

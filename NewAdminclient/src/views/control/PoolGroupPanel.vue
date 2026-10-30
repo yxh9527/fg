@@ -36,7 +36,7 @@
     <el-card v-if="hasSelectedAgent" shadow="never" class="content-card section-card section-card--table">
       <div class="table-toolbar"><div>
         <div class="panel-title panel-title--sm">执行记录</div>
-        <div class="table-toolbar__note">提交后需等待开奖服务执行。等待结算期间暂停受影响范围的新下注，已接受订单继续结算；失败任务自动重试。</div>
+        <div class="table-toolbar__note">此处展示分组配置执行记录；水池重置收到消息后直接清内存缓存和 Redis 四类累计，不记录活动局跟踪。</div>
       </div></div>
       <el-table :data="operations" empty-text="暂无操作记录">
         <el-table-column prop="id" label="操作 ID" width="95" />

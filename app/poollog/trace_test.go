@@ -116,7 +116,7 @@ func TestMetadataAllowsIDsButNeverTokensOrRawRequests(t *testing.T) {
 }
 
 func TestEveryPoolBusinessMethodHasExactlyOneTrace(t *testing.T) {
-	files := map[string][]string{"app/poolgroup/store.go": nil, "app/config/pool_group.go": nil, "app/tables/manager/poolGroup.go": nil, "lottery/dao/pool_group.go": nil, "lottery/dao/pool_session.go": nil, "lottery/dao/pool_user_stats.go": nil, "lottery/dao/luck5.go": nil, "lottery/rpc/pool_group.go": nil, "web-api/controller/v2/pool_group.go": nil, "lottery/dao/cache.go": {"ResetPool", "GetGame", "getPoolGame", "GetUser", "SaveAgentData", "SaveUserData", "GetAgentChanges"}, "app/config/config.go": {"GetPoolCfg", "effectivePoolLocked", "GetPoolCfgByGameId"}, "web-api/crontab/crontab.go": {"clearPool"}}
+	files := map[string][]string{"app/poolgroup/store.go": nil, "app/config/pool_group.go": nil, "app/tables/manager/poolGroup.go": nil, "lottery/dao/pool_group.go": nil, "lottery/dao/pool_user_stats.go": nil, "lottery/dao/luck5.go": nil, "lottery/rpc/pool_group.go": nil, "web-api/controller/v2/pool_group.go": nil, "lottery/dao/cache.go": {"ResetPool", "GetGame", "getPoolGame", "GetUser", "SaveAgentData", "SaveUserData", "GetAgentChanges"}, "app/config/config.go": {"GetPoolCfg", "effectivePoolLocked", "GetPoolCfgByGameId"}, "web-api/crontab/crontab.go": {"clearPool"}}
 	count := 0
 	for path, selected := range files {
 		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join("..", "..", path), nil, 0)

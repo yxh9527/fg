@@ -6,11 +6,13 @@ import (
 	"app/esindex"
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"lottery/dao"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,9 +82,6 @@ func (d *LotteryService) Luck5Deal(ctx context.Context, req *services.Luck5DealR
 	}
 	defer d.endMultiOpLock(lockKey)
 	round.BetCent, round.ReserveCent = bet, reserve
-	if response, err := d.rds.Luck5DealResult(ctx, round); err != nil || response != nil {
-		return luck5Response(response, err, req.RoundId)
-	}
 	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
 	if eGame == nil {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidGame"}, nil
@@ -135,7 +134,7 @@ func validateLuck5Record(req *services.Luck5SettleReq) bool {
 }
 
 func validateLuck5SettleRequest(req *services.Luck5SettleReq) bool {
-	if req == nil || strings.TrimSpace(req.AttemptId) == "" || req.AttemptId != strings.TrimSpace(req.AttemptId) || len(req.AttemptId) > 128 {
+	if req == nil {
 		return false
 	}
 	round := &dao.Luck5Round{UserId: req.UserId, AgentId: req.AgentId, GameId: req.GameId, CurrencyType: req.CurrencyType, RoundId: req.RoundId}
@@ -143,7 +142,7 @@ func validateLuck5SettleRequest(req *services.Luck5SettleReq) bool {
 	return validateLuck5Identity(round) && winOK && validateLuck5Record(req)
 }
 
-// 已预扣局直接按原池派奖，记录保存失败时资金阶段保留供原请求补完。
+// 按Deal保存的原下注和预占做正常差额结算，不维护候选防重或资金阶段恢复。
 func (d *LotteryService) Luck5Settle(ctx context.Context, req *services.Luck5SettleReq) (*services.Luck5Resp, error) {
 	if req == nil {
 		return &services.Luck5Resp{Code: services.ErrorCode_PARAMS_INVALID, Error: "invalidRequest"}, nil
@@ -159,8 +158,6 @@ func (d *LotteryService) Luck5Settle(ctx context.Context, req *services.Luck5Set
 	}
 	defer d.endMultiOpLock(lockKey)
 	round.WinCent = win
-	round.AttemptId = req.AttemptId
-	round.Signature = idempotencySignature(req.AttemptId, fmt.Sprint(win), req.RecordJson)
 	resp, err := dao.CacheIns().Luck5Settle(ctx, round, func(stored *dao.Luck5Round) error {
 		return d.saveLuck5Record(ctx, stored)
 	})
@@ -185,6 +182,38 @@ func (d *LotteryService) saveLuck5Record(ctx context.Context, round *dao.Luck5Ro
 	if payload.CreatedAtMs < 0 || payload.CreatedAtMs > math.MaxInt64/1000000 {
 		return errors.New("invalid record timestamp")
 	}
+	// 只校正落库副本，原候选JSON和幂等签名保持不变。Balance来自首次派奖快照。
+	corrected := false
+	var accepted map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(round.RecordJson), &accepted); err != nil {
+		return err
+	}
+	if raw, exists := accepted["cents"]; exists {
+		var cents map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &cents); err != nil || cents == nil {
+			return errors.New("invalid record cents")
+		}
+		cents["endBalanceCents"], _ = json.Marshal(strconv.FormatInt(round.Balance, 10))
+		accepted["cents"], _ = json.Marshal(cents)
+		corrected = true
+	}
+	if raw, exists := accepted["listItem"]; exists {
+		var list map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &list); err != nil || list == nil {
+			return errors.New("invalid record list item")
+		}
+		list["end_chips"], _ = json.Marshal(balance.StringFixed(2))
+		accepted["listItem"], _ = json.Marshal(list)
+		corrected = true
+	}
+	acceptedJSON := []byte(round.RecordJson)
+	var err error
+	if corrected {
+		acceptedJSON, err = json.Marshal(accepted)
+		if err != nil {
+			return err
+		}
+	}
 	hash := md5.Sum([]byte(fmt.Sprintf("%d|%d|%s", round.AgentId, round.UserId, round.RoundId)))
 	record := &entity.CacheRecordsReq{
 		WebId: round.WebId, UserId: round.UserId, AgentId: round.AgentId, GameId: round.GameId,
@@ -196,10 +225,10 @@ func (d *LotteryService) saveLuck5Record(ctx context.Context, round *dao.Luck5Ro
 		PlayedDate: payload.CreatedAtMs, RowVersion: payload.CreatedAtMs * 1000000,
 		RoundID: round.RoundId, Symbol: round.Symbol, GameName: round.GameName,
 		Revenue: revenue.InexactFloat64(), ExRevenue: round.Revenue.InexactFloat64(),
-		Log: round.RecordJson, Hash: fmt.Sprintf("%x", hash), Complete: true, IsTourist: round.IsTourist,
+		Log: string(acceptedJSON), Hash: fmt.Sprintf("%x", hash), Complete: true, IsTourist: round.IsTourist,
 	}
 	saveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	_, err := d.es.Client.Index().Index(esindex.Settlement()).Id(record.Hash).BodyJson(record).Do(saveCtx)
+	_, err = d.es.Client.Index().Index(esindex.Settlement()).Id(record.Hash).BodyJson(record).Do(saveCtx)
 	return err
 }

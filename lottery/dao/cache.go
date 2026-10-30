@@ -5,7 +5,6 @@ import (
 	"app/esindex"
 	"app/poollog"
 	"context"
-	"errors"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/redis/go-redis/v9"
@@ -715,14 +714,13 @@ func ResetPool(data interface{}) {
 	poolLogFields = append(poolLogFields, poollog.MetadataFields(data)...)
 	poolLogTrace := poollog.Begin("dao.ResetPool", zap.InfoLevel, poolLogFields...)
 	defer poolLogTrace.Finish(nil)
-	if err := resetPoolEvent(context.Background(), data); err != nil {
-		poollog.Event(zap.ErrorLevel, "dao.ResetPool", "resetPoolEvent", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		if errors.Is(err, errPoolResetWaiting) {
-			zap.L().Warn("水池重置等待未结算订单或前序任务，尚未清池", zap.Error(err))
-			return
-		}
-		zap.L().Error("水池重置未完成，请检查重置任务及错误原因", zap.Error(err))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := resetPoolCounters(ctx); err != nil {
+		poollog.Event(zap.ErrorLevel, "dao.ResetPool", "reset_failed", "内存水池已重置，删除Redis四类累计失败", append(poolLogFields, zap.Error(err))...)
+		return
 	}
+	poollog.Event(zap.InfoLevel, "dao.ResetPool", "pool_counters_reset", "已重置内存水池缓存并删除Redis四类累计", poolLogFields...)
 }
 
 // 获取单控阈值

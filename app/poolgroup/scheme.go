@@ -449,7 +449,7 @@ func (s Store) agentTarget(tx *gorm.DB, input AgentSchemeRequest, id int64, lock
 	preview.Generation = binding.Generation
 	preview.Mode = binding.Mode
 	var pending int64
-	if err := tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ?", id, Applied).Count(&pending).Error; err != nil {
+	if err := tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ? AND kind <> ?", id, Applied, "reset").Count(&pending).Error; err != nil {
 		return preview, err
 	}
 	if pending > 0 || binding.Status == Pending || binding.Status == Applying || binding.Status == Waiting || binding.Status == Failed {

@@ -872,12 +872,12 @@ export default {
     },
     async resetPoolImmediately() {
       try {
-        await this.$confirm("确认立即重置水池？", "提示", { type: "warning" });
+        await this.$confirm("确认重置内存中的水池缓存，并删除 Redis 中四类水池累计？分组和初始配置保留。", "立即重置水池", { type: "warning" });
       } catch (error) {
         return;
       }
       await resetPoolNow();
-      this.$message.success("已提交立即重置");
+      this.$message.success("重置消息已发送，开奖服务收到后直接清空水池累计");
       this.fetchResetInfo();
     },
     async fetchPoolConfigs() {

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"lottery/dao"
 	"lottery/util"
@@ -60,9 +59,6 @@ func run(cmd *cobra.Command, args []string) error {
 	dao.CahceInit()
 	//加载对局数据
 	dao.LoadAllRoundData()
-	if err := dao.RecoverLuck5Sessions(context.Background()); err != nil {
-		return err
-	}
 	if err := dao.StartPoolGroupWorker(); err != nil {
 		return err
 	}

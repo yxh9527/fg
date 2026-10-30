@@ -243,7 +243,7 @@ func (s Store) Submit(ctx context.Context, input Intent, operatorID int64) (pool
 			return err
 		}
 		var count int64
-		if err := tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ?", input.AgentID, Applied).Count(&count).Error; err != nil {
+		if err := tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ? AND kind <> ?", input.AgentID, Applied, "reset").Count(&count).Error; err != nil {
 			poollog.Event(zap.ErrorLevel, "poolgroup.Store.Submit", "tx.Model.Where.Count.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return err
 		}
@@ -644,91 +644,4 @@ func (l *Lease) Close() {
 	} else {
 		poollog.Event(zap.DebugLevel, "poolgroup.Lease.Close", "lease_released", "代理水池租约释放检查完成", zap.String("lockKey", l.Key))
 	}
-}
-
-// ResetOperations loads all batch tasks, including applied tasks for local cache synchronization.
-func (s Store) ResetOperations(ctx context.Context, batchID string) (poolLogResult0 []manager.PoolGroupOperation, poolLogResult1 error) {
-	poolLogFields := []zap.Field{}
-	poolLogFields = append(poolLogFields, poollog.MetadataFields(s)...)
-	poolLogFields = append(poolLogFields, zap.String("batchId", batchID))
-	poolLogTrace := poollog.Begin("poolgroup.Store.ResetOperations", zap.InfoLevel, poolLogFields...)
-	defer poolLogTrace.Finish(&poolLogResult1)
-	var operations []manager.PoolGroupOperation
-	err := s.DB.WithContext(ctx).Where("kind = ? AND request_id = ?", "reset", "reset:"+batchID).Order("id ASC").Find(&operations).Error
-	if err == nil {
-		poollog.Event(zap.InfoLevel, "poolgroup.Store.ResetOperations", "batch_loaded", "已读取重置批次对应任务", append(poolLogFields, zap.Int("operationCount", len(operations)))...)
-	}
-	return operations, err
-}
-
-// QueueReset persists one idempotent reset task per agent; each is drained and executed independently.
-func (s Store) QueueReset(ctx context.Context, batchID string) (poolLogResult0 error) {
-	poolLogFields := []zap.Field{}
-	poolLogFields = append(poolLogFields, poollog.MetadataFields(s)...)
-	poolLogFields = append(poolLogFields, zap.String("batchId", batchID))
-	poolLogTrace := poollog.Begin("poolgroup.Store.QueueReset", zap.InfoLevel, poolLogFields...)
-	defer poolLogTrace.Finish(&poolLogResult0)
-	var agents []manager.Agent
-	if err := s.DB.WithContext(ctx).Find(&agents).Error; err != nil {
-		poollog.Event(zap.ErrorLevel, "poolgroup.Store.QueueReset", "s.DB.WithContext.Find.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	agents = append(agents, manager.Agent{Id: 0})
-	// A removed agent can still own live Redis statistics and must participate in the reset.
-	seen := make(map[int64]bool, len(agents))
-	for _, agent := range agents {
-		seen[agent.Id] = true
-	}
-	for _, key := range StatKeys() {
-		var cursor uint64
-		for {
-			values, next, err := s.Redis.ZScan(ctx, key, cursor, "*", 100).Result()
-			if err != nil {
-				poollog.Event(zap.ErrorLevel, "poolgroup.Store.QueueReset", "s.Redis.ZScan.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-				return err
-			}
-			for i := 0; i < len(values); i += 2 {
-				separator := strings.IndexByte(values[i], '_')
-				if separator < 1 {
-					continue
-				}
-				id, err := strconv.ParseInt(values[i][:separator], 10, 64)
-				if err == nil && id >= 0 && !seen[id] {
-					agents = append(agents, manager.Agent{Id: id})
-					seen[id] = true
-				}
-			}
-			cursor = next
-			if cursor == 0 {
-				break
-			}
-		}
-	}
-	var games []manager.Game
-	if err := s.DB.WithContext(ctx).Find(&games).Error; err != nil {
-		poollog.Event(zap.ErrorLevel, "poolgroup.Store.QueueReset", "s.DB.WithContext.Find.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	symbols := make([]string, 0, len(games))
-	for _, g := range games {
-		symbols = append(symbols, g.ConfName)
-	}
-	for _, a := range agents {
-		payload, _ := json.Marshal(Plan{Intent: Intent{AgentID: a.Id, Kind: "reset", Symbols: symbols, RequestID: "reset:" + batchID}})
-		op := manager.PoolGroupOperation{AgentID: a.Id, RequestID: "reset:" + batchID, Kind: "reset", Payload: string(payload), Status: Pending}
-		if err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			if a.Id > 0 {
-				var row manager.Agent
-				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", a.Id).Limit(1).Find(&row).Error; err != nil {
-					return err
-				}
-			}
-			return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&op).Error
-		}); err != nil {
-			poollog.Event(zap.ErrorLevel, "poolgroup.Store.QueueReset", "s.DB.WithContext.Clauses.Create.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-			return err
-		}
-	}
-	poollog.Event(zap.InfoLevel, "poolgroup.Store.QueueReset", "batch_queued", "重置批次持久化完成，尚需执行清池", append(poolLogFields, zap.Int("agentCount", len(agents)), zap.Int("gameCount", len(symbols)))...)
-	return nil
 }

@@ -271,5 +271,8 @@ type AgentStatuChange struct {
 }
 
 type ResetPool struct {
-	BatchID string `json:"batchId"`
+	BatchID           string `json:"batchId"`
+	Publisher         string `json:"publisher,omitempty"`
+	PublisherInstance string `json:"publisherInstance,omitempty"`
+	PublishedAt       int64  `json:"publishedAt,omitempty"`
 }

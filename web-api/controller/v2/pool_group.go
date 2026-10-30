@@ -136,14 +136,14 @@ func PoolGroupList(c *gin.Context) {
 		rows = append(rows, poolGroupView{PoolGroupSnapshot: group, Balance: balance})
 	}
 	var operations []manager.PoolGroupOperation
-	if err = dao.Mysql().Manager.Where("agent_id = ?", agentID).Order("id DESC").Limit(30).Find(&operations).Error; err != nil {
+	if err = dao.Mysql().Manager.Where("agent_id = ? AND kind <> ?", agentID, "reset").Order("id DESC").Limit(30).Find(&operations).Error; err != nil {
 		poollog.Event(zap.ErrorLevel, "v2.PoolGroupList", "dao.Mysql.Manager.Where.Order.Limit.Find.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		poolGroupResponse(c, nil, err)
 		return
 	}
 	// The oldest unfinished operation can be outside the recent-history window.
 	var pending manager.PoolGroupOperation
-	if err = dao.Mysql().Manager.WithContext(c.Request.Context()).Where("agent_id = ? AND status <> ?", agentID, poolgroup.Applied).Order("id ASC").Limit(1).Find(&pending).Error; err != nil {
+	if err = dao.Mysql().Manager.WithContext(c.Request.Context()).Where("agent_id = ? AND status <> ? AND kind <> ?", agentID, poolgroup.Applied, "reset").Order("id ASC").Limit(1).Find(&pending).Error; err != nil {
 		poollog.Event(zap.ErrorLevel, "v2.PoolGroupList", "load_pending_operation", "读取当前阻塞水池操作失败", append(poolLogFields, zap.Error(err))...)
 		poolGroupResponse(c, nil, err)
 		return

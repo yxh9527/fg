@@ -2,19 +2,16 @@ package dao
 
 import (
 	"app/config"
-	"app/entity"
 	"app/poolgroup"
 	"app/poollog"
 	"app/tables/manager"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -25,66 +22,7 @@ func PoolGroupStore() (poolLogResult0 poolgroup.Store) {
 	return poolgroup.Store{DB: MDIns(), Redis: RedisIns().cli}
 }
 
-var errPoolResetWaiting = poollog.Expected(errors.New("水池重置等待未结算订单或前序任务"))
-
-type poolResetRepository interface {
-	QueueReset(context.Context, string) error
-	ResetOperations(context.Context, string) ([]manager.PoolGroupOperation, error)
-}
-
-func resetPoolEvent(ctx context.Context, data interface{}) (poolLogResult0 error) {
-	poolLogFields := []zap.Field{}
-	poolLogFields = append(poolLogFields, poollog.MetadataFields(data)...)
-	poolLogTrace := poollog.Begin("dao.resetPoolEvent", zap.InfoLevel, poolLogFields...)
-	defer poolLogTrace.Finish(&poolLogResult0)
-	reset, ok := data.(*entity.ResetPool)
-	if !ok || reset == nil {
-		return errors.New("水池重置事件无效")
-	}
-	if reset.BatchID == "" {
-		return errors.New("水池重置缺少批次编号，不能安全去重")
-	}
-	if err := executePoolResetBatch(ctx, PoolGroupStore(), reset.BatchID, executePoolGroupOperation); err != nil {
-		poollog.Event(zap.ErrorLevel, "dao.resetPoolEvent", "executePoolResetBatch", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	zap.L().Info("水池重置批次已确认完成，Redis和本机缓存均已处理", zap.String("batchId", reset.BatchID))
-	return nil
-}
-
-// ResetPool must attempt execution, not merely insert SQL tasks. The worker is a retry fallback.
-func executePoolResetBatch(ctx context.Context, repository poolResetRepository, batchID string, execute func(context.Context, manager.PoolGroupOperation) error) (poolLogResult0 error) {
-	poolLogFields := []zap.Field{}
-	poolLogFields = append(poolLogFields, zap.String("batchId", batchID))
-	poolLogTrace := poollog.Begin("dao.executePoolResetBatch", zap.InfoLevel, poolLogFields...)
-	defer poolLogTrace.Finish(&poolLogResult0)
-	if err := repository.QueueReset(ctx, batchID); err != nil {
-		poollog.Event(zap.ErrorLevel, "dao.executePoolResetBatch", "repository.QueueReset", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	operations, err := repository.ResetOperations(ctx, batchID)
-	if err != nil {
-		poollog.Event(zap.ErrorLevel, "dao.executePoolResetBatch", "repository.ResetOperations", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	if len(operations) == 0 {
-		return errors.New("未找到重置批次对应的任务，不能确认清池完成")
-	}
-	poollog.Event(zap.InfoLevel, "dao.executePoolResetBatch", "batch_execute_begin", "开始同步执行重置批次", append(poolLogFields, zap.Int("operationCount", len(operations)))...)
-	failures := make([]error, 0)
-	for _, op := range operations {
-		attempt, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err := execute(attempt, op)
-		cancel()
-		if err != nil {
-			fields := append(poolLogFields, poollog.MetadataFields(op)...)
-			poollog.Event(zap.ErrorLevel, "dao.executePoolResetBatch", "execute", "代理重置未完成", append(fields, zap.Error(err))...)
-			failures = append(failures, fmt.Errorf("代理%d重置未完成: %w", op.AgentID, err))
-		}
-	}
-	poollog.Event(zap.InfoLevel, "dao.executePoolResetBatch", "batch_execute_end", "重置批次本轮执行结束", append(poolLogFields, zap.Int("operationCount", len(operations)), zap.Int("unfinishedCount", len(failures)))...)
-	return errors.Join(failures...)
-}
+var errPoolResetWaiting = poollog.Expected(errors.New("等待该代理前序水池配置任务完成"))
 
 // BeginPoolRequest runs while the cross-instance agent lease is held. Never reuse another instance's cached totals.
 func BeginPoolRequest(ctx context.Context, agentID int64) (poolLogResult0 error) {
@@ -193,7 +131,7 @@ func StartPoolGroupWorker() (poolLogResult0 error) {
 		defer ticker.Stop()
 		for range ticker.C {
 			var ops []manager.PoolGroupOperation
-			first := MDIns().Model(&manager.PoolGroupOperation{}).Select("MIN(id)").Where("status <> ?", poolgroup.Applied).Group("agent_id")
+			first := MDIns().Model(&manager.PoolGroupOperation{}).Select("MIN(id)").Where("status <> ? AND kind <> ?", poolgroup.Applied, "reset").Group("agent_id")
 			if err := MDIns().Where("id IN (?)", first).Order("updated_at ASC, id ASC").Limit(100).Find(&ops).Error; err != nil {
 				poollog.Event(zap.ErrorLevel, "dao.StartPoolGroupWorker", "MDIns.Where.Order.Limit.Find.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 				zap.L().Error("读取水池组任务失败", zap.Error(err))
@@ -254,7 +192,7 @@ func executePoolGroupOperation(ctx context.Context, op manager.PoolGroupOperatio
 	}
 	op = current
 	var earlier int64
-	if err = MDIns().WithContext(ctx).Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND id < ? AND status <> ?", op.AgentID, op.ID, poolgroup.Applied).Count(&earlier).Error; err != nil {
+	if err = MDIns().WithContext(ctx).Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND id < ? AND status <> ? AND kind <> ?", op.AgentID, op.ID, poolgroup.Applied, "reset").Count(&earlier).Error; err != nil {
 		poollog.Event(zap.ErrorLevel, "dao.executePoolGroupOperation", "MDIns.WithContext.Model.Where.Count.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return err
 	}
@@ -280,57 +218,6 @@ func executePoolGroupOperation(ctx context.Context, op manager.PoolGroupOperatio
 	}
 	if state.LastOperationID < op.ID {
 		poollog.Event(zap.InfoLevel, "dao.executePoolGroupOperation", "gate_enabled", "已开启受影响游戏的切换门禁", append(poolLogFields, zap.Bool("allGames", gate.All), zap.Int("affectedGameCount", len(gate.Symbols)))...)
-		sessions, err := RedisIns().cli.HGetAll(ctx, poolgroup.Key(op.AgentID, "sessions")).Result()
-		if err != nil {
-			poollog.Event(zap.ErrorLevel, "dao.executePoolGroupOperation", "RedisIns.cli.HGetAll.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-			return err
-		}
-		processing, err := RedisIns().cli.HGetAll(ctx, poolgroup.Key(op.AgentID, "inflight")).Result()
-		if err != nil {
-			poollog.Event(zap.ErrorLevel, "dao.executePoolGroupOperation", "RedisIns.cli.HGetAll.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-			return err
-		}
-		open, inflight := 0, 0
-		for _, raw := range sessions {
-			var session PoolSession
-			if err = json.Unmarshal([]byte(raw), &session); err != nil {
-				poollog.Event(zap.ErrorLevel, "dao.executePoolGroupOperation", "json.Unmarshal", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-				return err
-			}
-			if gate.Affects(session.Symbol) {
-				open++
-			}
-		}
-		for _, raw := range processing {
-			var request struct {
-				Symbol string `json:"symbol"`
-			}
-			if err = json.Unmarshal([]byte(raw), &request); err != nil {
-				poollog.Event(zap.ErrorLevel, "dao.executePoolGroupOperation", "json.Unmarshal", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-				return err
-			}
-			if gate.Affects(request.Symbol) {
-				inflight++
-			}
-		}
-		agent := CacheIns().GetAgent(op.AgentID)
-		agent.lock.Lock()
-		legacy := false
-		for _, r := range agent.RoundCache {
-			if !r.Over {
-				legacy = true
-				break
-			}
-		}
-		agent.lock.Unlock()
-		if open > 0 || inflight > 0 || legacy {
-			poollog.Event(zap.WarnLevel, "dao.executePoolGroupOperation", "waiting_settlement", "仍有未结算或结果待核实订单，暂不清池", append(poolLogFields, zap.Int("activeSessionCount", open), zap.Int("inflightCount", inflight), zap.Bool("legacyRoundPending", legacy))...)
-			if err = MDIns().Model(&manager.PoolGroupOperation{}).Where("id = ?", op.ID).Updates(map[string]interface{}{"status": poolgroup.Waiting, "error": fmt.Sprintf("等待未结算订单：活动链%d，处理中%d", open, inflight)}).Error; err != nil {
-				poollog.Event(zap.ErrorLevel, "dao.executePoolGroupOperation", "MDIns.Model.Where.Updates.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-				return err
-			}
-			return errPoolResetWaiting
-		}
 		if err = MDIns().Model(&manager.PoolGroupOperation{}).Where("id = ?", op.ID).Updates(map[string]interface{}{"status": poolgroup.Applying, "error": ""}).Error; err != nil {
 			poollog.Event(zap.ErrorLevel, "dao.executePoolGroupOperation", "MDIns.Model.Where.Updates.Error", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 			return err
@@ -368,35 +255,6 @@ func applyPoolRuntime(ctx context.Context, lease *poolgroup.Lease, state *poolgr
 	poolLogFields = append(poolLogFields, poollog.MetadataFields(op)...)
 	poolLogTrace := poollog.Begin("dao.applyPoolRuntime", zap.InfoLevel, poolLogFields...)
 	defer poolLogTrace.Finish(&poolLogResult1)
-	if op.Kind == "reset" && state.LastOperationID < op.ID { // Removed games and internal group members may still have counters.
-		symbols := append([]string(nil), plan.Intent.Symbols...)
-		prefix := strconv.FormatInt(op.AgentID, 10) + "_"
-		for _, key := range poolgroup.StatKeys() {
-			var cursor uint64
-			for {
-				values, next, err := RedisIns().cli.ZScan(ctx, key, cursor, prefix+"*", 100).Result()
-				if err != nil {
-					poollog.Event(zap.ErrorLevel, "dao.applyPoolRuntime", "RedisIns.cli.ZScan.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-					return nil, err
-				}
-				for i := 0; i < len(values); i += 2 {
-					symbols = append(symbols, strings.TrimPrefix(values[i], prefix))
-				}
-				cursor = next
-				if cursor == 0 {
-					break
-				}
-			}
-		}
-		agent := CacheIns().GetAgent(op.AgentID)
-		agent.lock.RLock()
-		for symbol := range agent.gameCache {
-			symbols = append(symbols, symbol)
-		}
-		agent.lock.RUnlock()
-		plan.Intent.Symbols = symbols
-		poollog.Event(zap.InfoLevel, "dao.applyPoolRuntime", "reset_scan_done", "已扫描本代理现存Redis统计及内存水池", append(poolLogFields, zap.Int("candidateSymbolCount", len(symbols)))...)
-	}
 	next, err := PoolGroupStore().Apply(ctx, lease, state, op, plan)
 	if err != nil {
 		poollog.Event(zap.ErrorLevel, "dao.applyPoolRuntime", "PoolGroupStore.Apply", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
@@ -437,79 +295,3 @@ func syncPoolRuntimeMemory(agentID int64, state *poolgroup.State) {
 }
 
 var clearPoolGate = redis.NewScript(`if redis.call('GET',KEYS[2])~=ARGV[2] then return redis.error_reply('pool lease lost') end if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('DEL',KEYS[1]) end return 1`)
-
-// RecoverLuck5Sessions imports durable accepted deals made before an interceptor/session update.
-func RecoverLuck5Sessions(ctx context.Context) (poolLogResult0 error) {
-	poolLogFields := []zap.Field{}
-	poolLogTrace := poollog.Begin("dao.RecoverLuck5Sessions", zap.InfoLevel, poolLogFields...)
-	defer poolLogTrace.Finish(&poolLogResult0)
-	var cursor uint64
-	for {
-		keys, next, err := RedisIns().cli.Scan(ctx, cursor, "luck5:round:*", 100).Result()
-		if err != nil {
-			poollog.Event(zap.ErrorLevel, "dao.RecoverLuck5Sessions", "RedisIns.cli.Scan.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-			return err
-		}
-		for _, key := range keys {
-			raw, err := RedisIns().cli.Get(ctx, key).Bytes()
-			if errors.Is(err, redis.Nil) {
-				continue
-			}
-			if err != nil {
-				poollog.Event(zap.ErrorLevel, "dao.RecoverLuck5Sessions", "RedisIns.cli.Get.Bytes", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-				return err
-			}
-			var r Luck5Round
-			if err = json.Unmarshal(raw, &r); err != nil {
-				poollog.Event(zap.ErrorLevel, "dao.RecoverLuck5Sessions", "json.Unmarshal", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-				return err
-			}
-			if r.DealCode == 0 && !r.RecordDone && r.IsTourist == 0 {
-				if err = recoverLuck5Session(ctx, key, int64(r.AgentId)); err != nil {
-					poollog.Event(zap.ErrorLevel, "dao.RecoverLuck5Sessions", "recoverLuck5Session", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-					return err
-				}
-			}
-		}
-		cursor = next
-		if cursor == 0 {
-			break
-		}
-	}
-	return nil
-}
-func recoverLuck5Session(ctx context.Context, key string, agentID int64) (poolLogResult0 error) {
-	poolLogFields := []zap.Field{}
-	poolLogFields = append(poolLogFields, zap.Int64("agentId", agentID))
-	poolLogTrace := poollog.Begin("dao.recoverLuck5Session", zap.InfoLevel, poolLogFields...)
-	defer poolLogTrace.Finish(&poolLogResult0)
-	lease, err := poolgroup.Acquire(ctx, RedisIns().cli, agentID)
-	if err != nil {
-		poollog.Event(zap.ErrorLevel, "dao.recoverLuck5Session", "poolgroup.Acquire", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	defer lease.Close()
-	raw, err := RedisIns().cli.Get(ctx, key).Bytes()
-	if errors.Is(err, redis.Nil) {
-		return nil
-	}
-	if err != nil {
-		poollog.Event(zap.ErrorLevel, "dao.recoverLuck5Session", "RedisIns.cli.Get.Bytes", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	var r Luck5Round
-	if err = json.Unmarshal(raw, &r); err != nil {
-		poollog.Event(zap.ErrorLevel, "dao.recoverLuck5Session", "json.Unmarshal", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-		return err
-	}
-	if r.DealCode != 0 || r.RecordDone || r.IsTourist != 0 {
-		return nil
-	}
-	symbol := r.PoolSymbol
-	if symbol == "" {
-		symbol = r.Symbol
-	}
-	session := PoolSession{Kind: "luck5", Symbol: r.Symbol, PoolSymbol: symbol, Version: r.PoolVersion, RoundID: r.RoundId, UserID: r.UserId, Amount: "0"}
-	data, _ := json.Marshal(session)
-	return RedisIns().cli.HSet(ctx, poolgroup.Key(agentID, "sessions"), Luck5SessionKey(r.UserId, r.GameId, r.CurrencyType, r.RoundId), data).Err()
-}

@@ -296,7 +296,7 @@ func layoutOperationGate(state *State, op manager.PoolGroupOperation, plan Plan)
 // prepareLayout runs in the agent/binding transaction, so task creation and its identity commit together.
 func (s Store) prepareLayout(tx *gorm.DB, item manager.PoolSyncItem, defs []Definition, operatorID int64) (*manager.PoolGroupOperation, bool, error) {
 	var pending int64
-	if err := tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ?", item.AgentID, Applied).Count(&pending).Error; err != nil {
+	if err := tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ? AND kind <> ?", item.AgentID, Applied, "reset").Count(&pending).Error; err != nil {
 		return nil, false, err
 	}
 	if pending > 0 {

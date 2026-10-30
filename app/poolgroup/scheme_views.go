@@ -99,7 +99,7 @@ func (s Store) PreviewScheme(ctx context.Context, input SchemeRequest, page, siz
 			}
 		}
 		var pending int64
-		if err = tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ?", agent.Id, Applied).Count(&pending).Error; err != nil {
+		if err = tx.Model(&manager.PoolGroupOperation{}).Where("agent_id = ? AND status <> ? AND kind <> ?", agent.Id, Applied, "reset").Count(&pending).Error; err != nil {
 			return nil, err
 		}
 		if pending > 0 {

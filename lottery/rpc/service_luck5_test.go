@@ -54,10 +54,10 @@ func TestLuck5FundsLockIsPerRound(t *testing.T) {
 	}
 }
 
-func TestLuck5SettleRequiresAttemptID(t *testing.T) {
+func TestLuck5SettleDoesNotRequireAttemptID(t *testing.T) {
 	req := &services.Luck5SettleReq{UserId: 279, GameId: 7012, CurrencyType: "CNY", RoundId: "round", WinAmount: "0.00", RecordJson: `{"recordId":"round","userId":279,"gameId":7012,"currencySymbol":"CNY","createdAtMs":1}`}
-	if validateLuck5SettleRequest(req) {
-		t.Fatal("accepted settle without attemptId")
+	if !validateLuck5SettleRequest(req) {
+		t.Fatal("settle incorrectly required lottery-side dedup identity")
 	}
 	req.AttemptId = "attempt-1"
 	if !validateLuck5SettleRequest(req) {
