@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 	"web-api/common"
 	. "web-api/common"
 	"web-api/controller"
@@ -53,6 +54,12 @@ func run(cmd *cobra.Command, args []string) {
 
 	// Init Redis.
 	dao.NewRedisDao(rc.Redis.Host, rc.Redis.User, rc.Redis.Pwd)
+	initCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	err = dao.InitRedisConfigs(initCtx)
+	cancel()
+	if err != nil {
+		panic(err)
+	}
 
 	// Init MySQL.
 	if err := dao.InitDB(rc); err != nil {
@@ -62,11 +69,6 @@ func run(cmd *cobra.Command, args []string) {
 	// Init database tables and seed data.
 	tables.InitMysqlDb(dao.Mysql().Manager, dao.Mysql().Player)
 	if err := poolgroup.Migrate(dao.Mysql().Manager); err != nil {
-		panic(err)
-	}
-
-	// Load pool_config table data into Redis on startup.
-	if err := dao.SyncPoolConfigsToRedis(); err != nil {
 		panic(err)
 	}
 

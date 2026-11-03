@@ -113,6 +113,12 @@ func InitMysqlDb(m, p *gorm.DB) {
 			}
 		}
 	}
+	// 百人类游戏：新库初始化及已有库启动时均修正分类。
+	if err := m.Model(&manager.Game{}).
+		Where("number IN ?", []int{7000, 7001, 7002, 7026}).
+		Update("gameClass", 2).Error; err != nil {
+		panic(err)
+	}
 	if !m.Migrator().HasTable(&manager.PoolConfig{}) {
 		m.AutoMigrate(&manager.PoolConfig{})
 		var games []manager.Game

@@ -981,7 +981,7 @@ export default {
     async syncPoolConfig(row) {
       if (row.groupId) { this.$message.info("组水池配置不能通过独立游戏配置同步"); return; }
       try {
-        await this.$confirm("确认同步该默认水池配置到全部代理？", "提示", { type: "warning" });
+        await this.$confirm("确认将该默认水池配置同步到所有同类游戏？单人类与百人类分别同步。", "提示", { type: "warning" });
       } catch (error) {
         return;
       }
@@ -1007,7 +1007,7 @@ export default {
       await syncAllPoolConfig({
         config: JSON.stringify(config),
       });
-      this.$message.success("已同步到全部代理");
+      this.$message.success("已同步到所有同类游戏");
       this.fetchPoolConfigs();
     },
     async fetchAwardConfigs() {

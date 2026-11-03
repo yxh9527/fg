@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/olivere/elastic/v7"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -355,12 +356,28 @@ func SyncAllPool(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "失败", Data: nil})
 		return
 	}
+	if err := syncAllPool(ctx.Request.Context(), dao.Mysql().Manager, dao.RedisIns().Client, pool); err != nil {
+		zap.L().Error("同步同类游戏水池配置失败", zap.Error(err))
+		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "同步失败", Data: nil})
+		return
+	}
+	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
+}
+
+func syncAllPool(ctx context.Context, db *gorm.DB, client redis.UniversalClient, pool *config.Pool) error {
 	srcGame := &manager.Game{}
-	dao.Mysql().Manager.Model(manager.Game{}).Where("number=?", pool.GameId).Take(srcGame)
+	if err := db.WithContext(ctx).Where("number=?", pool.GameId).Take(srcGame).Error; err != nil {
+		return fmt.Errorf("查询来源游戏失败: %w", err)
+	}
+	if srcGame.GameClass != 1 && srcGame.GameClass != 2 {
+		return fmt.Errorf("来源游戏分类无效: %d", srcGame.GameClass)
+	}
 	games := make([]*manager.Game, 0, 64)
-	dao.Mysql().Manager.Model(manager.Game{}).Where("gameType=?", srcGame.GameType).Find(&games)
+	if err := db.WithContext(ctx).Where("gameClass=?", srcGame.GameClass).Find(&games).Error; err != nil {
+		return fmt.Errorf("查询同类游戏失败: %w", err)
+	}
 	n := 0
-	piple := dao.RedisIns().Client.Pipeline()
+	piple := client.Pipeline()
 	cs := make(map[string]string)
 	for _, g := range games {
 		key := esindex.ConfigKey("pool", g.ConfName)
@@ -370,28 +387,24 @@ func SyncAllPool(ctx *gin.Context) {
 		pool.Symbol = g.ConfName
 		ps, err := jsoniter.MarshalToString(pool)
 		if err != nil {
-			continue
+			return fmt.Errorf("序列化水池配置失败: %w", err)
 		}
 		cs[key] = ps
-		piple.Set(context.Background(), key, ps, -1)
+		piple.Set(ctx, key, ps, -1)
 		n++
 		if n >= 100 {
 			n = 0
-			_, err = piple.Exec(context.Background())
+			_, err = piple.Exec(ctx)
 			if err != nil {
-				zap.L().Error("保存配置失败", zap.Any("err", err))
-				ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "失败", Data: nil})
-				return
+				return fmt.Errorf("保存水池配置失败: %w", err)
 			}
-			piple = dao.RedisIns().Client.Pipeline()
+			piple = client.Pipeline()
 		}
 	}
 	if n > 0 {
-		_, err := piple.Exec(context.Background())
+		_, err := piple.Exec(ctx)
 		if err != nil {
-			zap.L().Error("保存配置失败", zap.Any("err", err))
-			ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "失败", Data: nil})
-			return
+			return fmt.Errorf("保存水池配置失败: %w", err)
 		}
 	}
 	//广播更新配置
@@ -404,9 +417,11 @@ func SyncAllPool(ctx *gin.Context) {
 			"event": "config",
 			"data":  dataStr,
 		})
-		dao.RedisIns().Publish("message", msg)
+		if err := client.Publish(ctx, "message", msg).Err(); err != nil {
+			return fmt.Errorf("发布水池配置失败: %w", err)
+		}
 	}
-	ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusOK, Msg: "成功", Data: nil})
+	return nil
 }
 
 func GetExchange(ctx *gin.Context) {

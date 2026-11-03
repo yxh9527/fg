@@ -7,7 +7,7 @@ type Game struct {
 	Name       string `gorm:"column:name" json:"name"`
 	NameZH     string `gorm:"column:nameZH" json:"nameZH"`
 	ConfName   string `gorm:"column:confName" json:"-"`
-	GameClass  int    `gorm:"column:gameClass" json:"-"`
+	GameClass  int    `gorm:"column:gameClass" json:"-"` // 1：单人类游戏，2：百人类游戏
 	GameType   int    `gorm:"column:gameType" json:"-"`
 	LimitTime  string `gorm:"column:limitTime" json:"-"`
 	IsFrozen   int16  `gorm:"column:isFrozen" json:"isFrozen"`
