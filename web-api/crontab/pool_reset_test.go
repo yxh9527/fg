@@ -102,3 +102,59 @@ func TestScheduledResetDoesNotDispatchBeforeDueOrAdvanceFailedPublish(t *testing
 		t.Fatal("failed publication changed schedule", got, err)
 	}
 }
+
+func TestMissingResetScheduleIsInitializedWithoutDispatch(t *testing.T) {
+	server := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	defer rdb.Close()
+	ctx := context.Background()
+	now := time.Unix(1793265000, 0)
+
+	batch, err := dispatchPoolReset(ctx, rdb, false, now)
+	if err != nil || batch != "" {
+		t.Fatalf("missing schedule should be initialized and remain pending: batch=%q err=%v", batch, err)
+	}
+	var schedule view.ResetPoolConfig
+	if raw, err := rdb.Get(ctx, resetPoolConfigKey).Bytes(); err != nil {
+		t.Fatal(err)
+	} else if err = json.Unmarshal(raw, &schedule); err != nil {
+		t.Fatal(err)
+	}
+	if schedule.Interval != 7 || schedule.ResetTime != now.Unix()+7*86400 {
+		t.Fatalf("unexpected default schedule: %+v", schedule)
+	}
+}
+
+func TestManualResetInitializesMissingSchedule(t *testing.T) {
+	server := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	defer rdb.Close()
+	ctx := context.Background()
+	now := time.Unix(1793265000, 0)
+	sub := rdb.Subscribe(ctx, "message")
+	defer sub.Close()
+	if _, err := sub.Receive(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	batch, err := dispatchPoolReset(ctx, rdb, true, now)
+	if err != nil || batch == "" {
+		t.Fatalf("manual reset should initialize and dispatch: batch=%q err=%v", batch, err)
+	}
+	message, err := sub.ReceiveMessage(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message.Payload == "" {
+		t.Fatal("manual reset published an empty message")
+	}
+	var schedule view.ResetPoolConfig
+	if raw, err := rdb.Get(ctx, resetPoolConfigKey).Bytes(); err != nil {
+		t.Fatal(err)
+	} else if err = json.Unmarshal(raw, &schedule); err != nil {
+		t.Fatal(err)
+	}
+	if schedule.Interval != 7 || schedule.ResetTime != now.Unix()+7*86400 {
+		t.Fatalf("unexpected next schedule: %+v", schedule)
+	}
+}

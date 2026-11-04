@@ -16,18 +16,62 @@ import (
 	"go.uber.org/zap"
 )
 
+const resetPoolConfigKey = "reset_pool_config"
+
+func defaultResetPoolConfig(now time.Time) view.ResetPoolConfig {
+	return view.ResetPoolConfig{
+		Interval:  7,
+		ResetTime: now.Unix() + 7*24*60*60,
+	}
+}
+
+// ensureResetPoolConfig creates the first schedule without overwriting an
+// existing schedule written by the control panel or another web-api instance.
+func ensureResetPoolConfig(ctx context.Context, rdb redis.UniversalClient, now time.Time) (view.ResetPoolConfig, error) {
+	raw, err := rdb.Get(ctx, resetPoolConfigKey).Bytes()
+	if err == nil {
+		var schedule view.ResetPoolConfig
+		if err = json.Unmarshal(raw, &schedule); err != nil {
+			return view.ResetPoolConfig{}, err
+		}
+		return schedule, nil
+	}
+	if !errors.Is(err, redis.Nil) {
+		return view.ResetPoolConfig{}, err
+	}
+
+	schedule := defaultResetPoolConfig(now)
+	raw, err = json.Marshal(schedule)
+	if err != nil {
+		return view.ResetPoolConfig{}, err
+	}
+	created, err := rdb.SetNX(ctx, resetPoolConfigKey, raw, 0).Result()
+	if err != nil {
+		return view.ResetPoolConfig{}, err
+	}
+	if created {
+		return schedule, nil
+	}
+	// Another instance initialized it between GET and SETNX. Read the winner's
+	// value so a manual reset cannot accidentally use stale defaults.
+	raw, err = rdb.Get(ctx, resetPoolConfigKey).Bytes()
+	if err != nil {
+		return view.ResetPoolConfig{}, err
+	}
+	if err = json.Unmarshal(raw, &schedule); err != nil {
+		return view.ResetPoolConfig{}, err
+	}
+	return schedule, nil
+}
+
 // Manual reset publishes now; it does not create SQL reset operations.
 func TriggerPoolResetNow(ctx context.Context) (string, error) { return triggerPoolReset(ctx, true) }
 func triggerPoolReset(ctx context.Context, manual bool) (string, error) {
 	return dispatchPoolReset(ctx, dao.RedisIns().Client, manual, time.Now())
 }
 func dispatchPoolReset(ctx context.Context, rdb redis.UniversalClient, manual bool, now time.Time) (string, error) {
-	raw, err := rdb.Get(ctx, "reset_pool_config").Bytes()
+	schedule, err := ensureResetPoolConfig(ctx, rdb, now)
 	if err != nil {
-		return "", err
-	}
-	var schedule view.ResetPoolConfig
-	if err = json.Unmarshal(raw, &schedule); err != nil {
 		return "", err
 	}
 	if schedule.ResetTime <= 0 || schedule.Interval <= 0 || schedule.Interval > 31 {
@@ -57,7 +101,7 @@ func dispatchPoolReset(ctx context.Context, rdb redis.UniversalClient, manual bo
 	schedule.Now = false
 	schedule.ResetTime = now.Unix() + int64(schedule.Interval)*24*60*60
 	updated, _ := json.Marshal(schedule)
-	if err = rdb.Set(ctx, "reset_pool_config", updated, 0).Err(); err != nil {
+	if err = rdb.Set(ctx, resetPoolConfigKey, updated, 0).Err(); err != nil {
 		poollog.Event(zap.ErrorLevel, "crontab.clearPool", "schedule_write_failed", "重置消息已发送，但下一次排期保存失败", zap.String("batchId", batchID), zap.Error(err))
 	} else {
 		poollog.Event(zap.InfoLevel, "crontab.clearPool", "next_schedule_saved", "下一次排期已保存，开奖服务收到消息后直接清内存及四类累计", zap.String("batchId", batchID), zap.Int64("nextResetTime", schedule.ResetTime))

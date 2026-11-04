@@ -243,6 +243,11 @@ func NewCrontab() {
 		))
 	}
 	//清空水池
+	initCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if _, err := ensureResetPoolConfig(initCtx, dao.RedisIns().Client, time.Now()); err != nil {
+		poollog.Event(zap.ErrorLevel, "crontab.NewCrontab", "reset_schedule_init_failed", "water pool reset schedule initialization failed", zap.Error(err))
+	}
+	cancel()
 	c.AddFunc("*/1 * * * *", clearPool)
 	//定时清理数据
 	c.AddFunc("*/10 * * * *", clearSettlementData)
