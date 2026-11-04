@@ -37,7 +37,8 @@
 <script>
 import dayjs from "dayjs";
 import AppTable from "@/components/AppTable.vue";
-import { getAgentGameDataAggs, getLinkageList } from "@/api/data";
+import { getAgentGameDataAggs, getLinkageList, getPoolGroups } from "@/api/data";
+import { getScheme } from "@/api/poolScheme";
 import { calcKillRate, calcProfit, toFixedNumber, toNumber } from "./reportHelpers";
 
 export default {
@@ -49,8 +50,10 @@ export default {
     return {
       loading: false,
       tableData: [],
+      poolGroupNames: {},
       agentOption: [],
       agentId: 0,
+      requestSequence: 0,
     };
   },
   computed: {
@@ -61,7 +64,7 @@ export default {
       ).format("YYYY-MM-DD HH:mm")}`;
     },
     columns() {
-      return [
+      const columns = [
         { title: "代理ID", key: "agentId", width: 90, align: "center" },
         { title: "代理名称", key: "agentName", minWidth: 160, align: "center" },
         { title: "游戏名称", key: "gameName", minWidth: 240, align: "center" },
@@ -115,20 +118,52 @@ export default {
             h("span", calcKillRate(calcProfit(row.effectiveBetsTotal, row.profitLossTotal), row.chipsTotal)),
         },
       ];
+      const gameNameColumn = columns.find((column) => column.key === "gameName");
+      gameNameColumn.render = (h, { row }) =>
+        h("div", { style: { position: "relative", minHeight: "34px", paddingTop: row.poolGroupName ? "14px" : "0" } }, [
+          row.poolGroupName
+            ? h(
+                "span",
+                {
+                  style: {
+                    position: "absolute",
+                    top: "0",
+                    right: "0",
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    color: "#2563eb",
+                    fontSize: "11px",
+                    lineHeight: "13px",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  },
+                },
+                row.poolGroupName
+              )
+            : null,
+          h("span", { style: { display: "block", overflowWrap: "anywhere" } }, row.gameName || "-"),
+        ]);
+      return columns;
     },
   },
   methods: {
     async getAgentGameAggs(agentId) {
+      const sequence = ++this.requestSequence;
       this.loading = true;
       try {
-        const response = await getAgentGameDataAggs([
-          { agentId },
-          { startTime: this.$route.query.startTime },
-          { endTime: this.$route.query.endTime },
-          { webId: this.$route.query.webId },
+        const [response] = await Promise.all([
+          getAgentGameDataAggs([
+            { agentId },
+            { startTime: this.$route.query.startTime },
+            { endTime: this.$route.query.endTime },
+            { webId: this.$route.query.webId },
+          ]),
+          this.loadPoolGroupNames(agentId, sequence),
         ]);
+        if (sequence !== this.requestSequence) return;
         this.tableData = (response.data.data.data || []).map((item) => ({
           ...item,
+          poolGroupName: item.poolGroupName || this.poolGroupNames[item.symbol] || "",
           userNumber:
             item.userNumber !== undefined && item.userNumber !== null && item.userNumber !== ""
               ? item.userNumber
@@ -141,7 +176,31 @@ export default {
           docCount: toNumber(item.docCount),
         }));
       } finally {
-        this.loading = false;
+        if (sequence === this.requestSequence) this.loading = false;
+      }
+    },
+    async loadPoolGroupNames(agentId, sequence) {
+      try {
+        const requests = [getPoolGroups({ agentId, webId: this.$route.query.webId })];
+        if (Number(agentId) === 0) {
+          requests.push(getScheme({ webId: this.$route.query.webId }));
+          if (Number(this.$route.query.webId) !== 0) requests.push(getScheme({ webId: 0 }));
+        }
+        const responses = await Promise.allSettled(requests);
+        if (sequence !== this.requestSequence) return;
+        const groups = responses.flatMap((response) => {
+          if (response.status !== "fulfilled") return [];
+          const data = response.value.data.data || {};
+          return data.groups || [];
+        });
+        this.poolGroupNames = groups.reduce((names, group) => {
+          (group.symbols || []).forEach((symbol) => {
+            if (!names[symbol]) names[symbol] = group.name;
+          });
+          return names;
+        }, {});
+      } catch (error) {
+        if (sequence === this.requestSequence) this.poolGroupNames = {};
       }
     },
     refreshPage() {

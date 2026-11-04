@@ -986,6 +986,17 @@ func GetAgentGameDataAggs(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, &entity.Response{Code: http.StatusInternalServerError, Msg: "获取代理信息失败"})
 		return
 	}
+	poolGroupNames := make(map[string]string)
+	if state, loadErr := groupStore().Load(ctx.Request.Context(), agentId); loadErr == nil {
+		config.CfgIns.ReplacePoolGroups(agentId, state.Groups)
+		for _, group := range state.Groups {
+			for _, symbol := range group.Symbols {
+				poolGroupNames[symbol] = group.Name
+			}
+		}
+	} else {
+		zap.L().Warn("load pool groups for agent game report failed", zap.Int64("agentId", agentId), zap.Error(loadErr))
+	}
 	result := entity.AgentGameAggs{
 		Data: make([]*entity.ReportFormItem, 0, 64),
 	}
@@ -1008,6 +1019,12 @@ func GetAgentGameDataAggs(ctx *gin.Context) {
 				item.GameName = cfg.Name
 			}
 			item.Symbol = cfg.Symbol
+			item.PoolGroupName = poolGroupNames[cfg.Symbol]
+			if item.PoolGroupName == "" {
+				if group := config.CfgIns.GetPoolGroup(agentId, cfg.Symbol); group != nil {
+					item.PoolGroupName = group.Name
+				}
+			}
 		}
 		d, b := v.Sum("effectiveBetsTotal")
 		if b {

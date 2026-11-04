@@ -191,6 +191,7 @@ type ReportFormItem struct {
 	AgentName          string  `json:"agentName"`
 	GameName           string  `json:"gameName"`
 	Symbol             string  `json:"symbol"`
+	PoolGroupName      string  `json:"poolGroupName,omitempty"`
 	PlayType           int32   `json:"playType"`
 }
 
