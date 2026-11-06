@@ -9,8 +9,8 @@ export const toFixedNumber = (value, digits = 2) =>
 export const calcProfit = (effectiveBetsTotal, profitLossTotal) =>
   toNumber(effectiveBetsTotal) - toNumber(profitLossTotal);
 
-export const calcKillRate = (profit, effectiveBetsTotal) => {
-  const chips = toNumber(effectiveBetsTotal);
+export const calcKillRate = (profit, chipsTotal) => {
+  const chips = toNumber(chipsTotal);
   if (!chips) return "0.000";
   return (profit / chips).toFixed(3);
 };

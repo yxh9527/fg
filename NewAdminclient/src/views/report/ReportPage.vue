@@ -225,7 +225,7 @@ export default {
           this.summaryRaw.effectiveBetsTotal,
           this.summaryRaw.profitLossTotal
         ),
-        this.summaryRaw.effectiveBetsTotal
+        this.summaryRaw.chipsTotal
       );
     },
     columns() {
