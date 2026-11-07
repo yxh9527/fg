@@ -48,6 +48,9 @@ func (rd *RedisDao) GetUserStatDataChecked(id uint32) (poolLogResult0 decimal.De
 		poollog.Event(zap.ErrorLevel, "dao.RedisDao.GetUserStatDataChecked", "account.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
 		return decimal.Zero, decimal.Zero, decimal.Zero, "", 0, fmt.Errorf("读取玩家身份失败: %w", err)
 	}
+	if name == "" {
+		return decimal.Zero, decimal.Zero, decimal.Zero, "", 0, errors.New("玩家账号为空")
+	}
 	raw, err := tourist.Result()
 	if err != nil {
 		poollog.Event(zap.ErrorLevel, "dao.RedisDao.GetUserStatDataChecked", "tourist.Result", "水池步骤失败", append(poolLogFields, zap.Error(err))...)

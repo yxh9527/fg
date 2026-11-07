@@ -389,6 +389,9 @@ func (d *LotteryService) updatePlayerCurrency(id uint32, delta int64) (int64, se
 }
 
 func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, req *slotsLotteryReq) (int64, bool, services.ErrorCode) {
+	if dao.CacheIns().GetUser(req.AgentId, int64(req.PlayerId)) == nil {
+		return 0, false, services.ErrorCode_SYSTEM_ERROR
+	}
 	var newCurrency int64
 	award, _ := decimal.NewFromString(req.ProfitLoss)
 	bet, _ := decimal.NewFromString(req.Bet)
@@ -483,6 +486,10 @@ func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, req *s
 }
 
 func (d *LotteryService) Complete(webId uint32, exchange decimal.Decimal, req *slotsLotteryReq) (int64, bool, services.ErrorCode) {
+	user := dao.CacheIns().GetUser(req.AgentId, int64(req.PlayerId))
+	if user == nil {
+		return 0, false, services.ErrorCode_SYSTEM_ERROR
+	}
 	eGame := dao.GamesManagerIns().GetById(int64(req.GameId))
 	if eGame.Number != int(req.GameId) {
 		zap.L().Error("获取Pool配置文件失败", zap.Any("roundId", req.RoundID), zap.Any("req", req))
@@ -541,7 +548,7 @@ func (d *LotteryService) Complete(webId uint32, exchange decimal.Decimal, req *s
 	}
 
 	nc := decimal.NewFromInt(newCurrency).Div(decimal.NewFromInt(100))
-	record := ConvertRecord(uint32(req.AgentId), req.PlayerId, req.RoundID, req.CurrencyType, eGame.ConfName, req.Account, req.State, nc, uint32(webId), bet.InexactFloat64(), award.InexactFloat64())
+	record := ConvertRecord(uint32(req.AgentId), req.PlayerId, req.RoundID, req.CurrencyType, eGame.ConfName, req.Account, req.State, nc, uint32(webId), bet.InexactFloat64(), award.InexactFloat64(), user.IsTourist)
 	d.SaveRecord(record)
 	zap.L().Info("Complete:注单信息",
 		zap.Any("agentId", req.AgentId),
@@ -579,7 +586,7 @@ func (d *LotteryService) Complete(webId uint32, exchange decimal.Decimal, req *s
 	return newCurrency, true, services.ErrorCode_OK
 }
 
-func ConvertRecord(agentId, userId uint32, recordId, currencyType, symbol, account, log string, newCurrency decimal.Decimal, webId uint32, totalBet, win float64) *entity.CacheRecordsReq {
+func ConvertRecord(agentId, userId uint32, recordId, currencyType, symbol, account, log string, newCurrency decimal.Decimal, webId uint32, totalBet, win float64, isTourist int32) *entity.CacheRecordsReq {
 	rate, _ := config.CfgIns.GetExchange(currencyType)
 	p := config.CfgIns.GetPoolCfg(int64(agentId), symbol)
 	bet := decimal.NewFromFloat(totalBet)
@@ -620,6 +627,7 @@ func ConvertRecord(agentId, userId uint32, recordId, currencyType, symbol, accou
 		BalanceCash:    newCurrency.Truncate(4).InexactFloat64(),
 		Chips:          chips.Mul(rate).Truncate(4).InexactFloat64(),
 		Complete:       true,
+		IsTourist:      isTourist,
 	}
 	return record
 }
@@ -906,9 +914,9 @@ func (d *LotteryService) doSingleBet(req *singleBetReq) (resp *singleBetResp, er
 		return resp, nil
 	}
 	var record *entity.CacheRecordsReq
-	if user.IsTourist == 0 && strings.TrimSpace(req.Result) != "" {
+	if strings.TrimSpace(req.Result) != "" {
 		record = ConvertRecord(req.AgentId, req.UserId, req.RoundID, req.CurrencyType, game.ConfName,
-			user.Account, req.Result, currencyFromCent(balance), uint32(agent.WebId), bet.InexactFloat64(), win.InexactFloat64())
+			user.Account, req.Result, currencyFromCent(balance), uint32(agent.WebId), bet.InexactFloat64(), win.InexactFloat64(), user.IsTourist)
 	}
 	poolChanged := false
 	balanceDelta := int64(0)
@@ -1157,9 +1165,9 @@ func (d *LotteryService) doMultiSettle(req *multiSettleReq) (resp *multiSettleRe
 		}
 		awards[item.UserId] = win.Mul(decimal.NewFromInt(100)).IntPart()
 		balances[item.UserId] = balance
+		records = append(records, ConvertRecord(item.AgentId, item.UserId, item.RecordID, item.CurrencyType, game.ConfName,
+			item.Account, item.Log, currencyFromCent(balance), uint32(agent.WebId), bet.InexactFloat64(), win.InexactFloat64(), user.IsTourist))
 		if user.IsTourist == 0 {
-			records = append(records, ConvertRecord(item.AgentId, item.UserId, item.RecordID, item.CurrencyType, game.ConfName,
-				item.Account, item.Log, currencyFromCent(balance), uint32(agent.WebId), bet.InexactFloat64(), win.InexactFloat64()))
 			if win.GreaterThan(decimal.Zero) {
 				poolPayouts = append(poolPayouts, poolPayout{
 					item: item, symbol: game.ConfName, amount: win.Mul(exchange),

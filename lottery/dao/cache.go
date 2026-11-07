@@ -139,15 +139,11 @@ func (ad *AgentData) GetUser(userId uint32) (poolLogResult0 *User) {
 		var e, p, c decimal.Decimal
 		var acc string
 		var isTourist int32
-		if ad.poolManaged {
-			var err error
-			e, p, c, acc, isTourist, err = RedisIns().GetUserStatDataChecked(userId)
-			if err != nil {
-				poollog.Event(zap.ErrorLevel, "dao.AgentData.GetUser", "RedisIns.GetUserStatDataChecked", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
-				panic(err)
-			}
-		} else {
-			e, p, c, acc, isTourist = RedisIns().GetUserStatData(userId)
+		var err error
+		e, p, c, acc, isTourist, err = RedisIns().GetUserStatDataChecked(userId)
+		if err != nil {
+			poollog.Event(zap.ErrorLevel, "dao.AgentData.GetUser", "RedisIns.GetUserStatDataChecked", "水池步骤失败", append(poolLogFields, zap.Error(err))...)
+			panic(err)
 		}
 		u = &User{TotalEffectBet: e, TotalProfLoss: p, UserId: userId, AgentId: ad.Id, Count: c, Account: acc, IsTourist: isTourist}
 		ad.SetUser(userId, u)
@@ -364,8 +360,11 @@ func (gcm *GameCacheMgr) ReturnPool(agentId int64, userId uint32, symbol string,
 	//细分代理锁
 	agent.lock.Lock()
 	defer agent.lock.Unlock()
+	user := agent.GetUser(uint32(userId))
+	if user.IsTourist != 0 {
+		return
+	}
 	game := agent.GetGame(symbol)
-	_ = agent.GetUser(uint32(userId))
 	if delta.GreaterThan(decimal.Zero) {
 		game.TotalProfLoss = game.TotalProfLoss.Sub(delta)
 		game.UpdateTime = time.Now().Unix()

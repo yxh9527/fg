@@ -185,6 +185,13 @@ func (d *LotteryService) refundFacadePool(agentId, userId, gameId uint32, curren
 	if !refund.GreaterThan(decimal.Zero) {
 		return services.ErrorCode_OK
 	}
+	user := dao.CacheIns().GetUser(int64(agentId), int64(userId))
+	if user == nil {
+		return services.ErrorCode_SYSTEM_ERROR
+	}
+	if user.IsTourist != 0 {
+		return services.ErrorCode_OK
+	}
 	eGame := dao.GamesManagerIns().GetById(int64(gameId))
 	if eGame == nil {
 		return services.ErrorCode_PARAMS_INVALID
@@ -434,6 +441,10 @@ func (d *LotteryService) SlotsDoBetFree(ctx context.Context, req *services.Slots
 
 // slotsFreeAward 免费局入账并完局统计。不扣本金、不预扣、不对账 RoundCache。
 func (d *LotteryService) slotsFreeAward(req *services.SlotsDoBetFreeReq, win, totalBet decimal.Decimal) (decimal.Decimal, services.ErrorCode) {
+	user := dao.CacheIns().GetUser(int64(req.AgentId), int64(req.UserId))
+	if user == nil {
+		return decimal.Zero, services.ErrorCode_SYSTEM_ERROR
+	}
 	eAgent := dao.AgentManagerIns().Get(int64(req.AgentId))
 	if eAgent == nil {
 		if req.AgentId == 0 {
@@ -478,33 +489,33 @@ func (d *LotteryService) slotsFreeAward(req *services.SlotsDoBetFreeReq, win, to
 	}
 
 	nc := currencyFromCent(newCurrency)
-	user := dao.CacheIns().GetUser(int64(req.AgentId), int64(req.UserId))
-	if user != nil && user.IsTourist == 0 {
-		account := req.Account
-		if account == "" {
-			account = user.Account
-		}
-		record := ConvertRecord(
-			req.AgentId,
-			req.UserId,
-			req.RoundId,
-			req.CurrencyType,
-			eGame.ConfName,
-			account,
-			req.RecordJson,
-			nc,
-			uint32(eAgent.WebId),
-			totalBet.InexactFloat64(),
-			win.InexactFloat64(),
-		)
-		d.SaveRecord(record)
-		zap.L().Info("SlotsDoBetFree:注单信息",
-			zap.Uint32("agentId", req.AgentId),
-			zap.Uint32("playerId", req.UserId),
-			zap.Uint32("gameId", req.GameId),
-			zap.String("symbol", eGame.ConfName),
-			zap.String("roundId", req.RoundId),
-			zap.Any("record", record))
+	account := req.Account
+	if account == "" {
+		account = user.Account
+	}
+	record := ConvertRecord(
+		req.AgentId,
+		req.UserId,
+		req.RoundId,
+		req.CurrencyType,
+		eGame.ConfName,
+		account,
+		req.RecordJson,
+		nc,
+		uint32(eAgent.WebId),
+		totalBet.InexactFloat64(),
+		win.InexactFloat64(),
+		user.IsTourist,
+	)
+	d.SaveRecord(record)
+	zap.L().Info("SlotsDoBetFree:注单信息",
+		zap.Uint32("agentId", req.AgentId),
+		zap.Uint32("playerId", req.UserId),
+		zap.Uint32("gameId", req.GameId),
+		zap.String("symbol", eGame.ConfName),
+		zap.String("roundId", req.RoundId),
+		zap.Any("record", record))
+	if user.IsTourist == 0 {
 		billBet := decimal.Zero
 		if totalBet.GreaterThan(decimal.Zero) {
 			billBet = totalBet.Neg()

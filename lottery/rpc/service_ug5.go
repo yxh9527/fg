@@ -274,23 +274,25 @@ func (d *LotteryService) Ug5Guess(ctx context.Context, req *services.Ug5GuessReq
 			d.SaveBill(req.AgentId, req.UserId, bet.Neg(), win, newCurrency.Truncate(2).InexactFloat64(),
 				eGame.ConfName, "竞猜派奖", req.CurrencyType, req.RoundId)
 		}
-		if req.Complete {
-			account := user.Account
-			record := ConvertRecord(req.AgentId, req.UserId, req.RoundId, req.CurrencyType, eGame.ConfName,
-				account, recordJSON, newCurrency, uint32(eAgent.WebId), chainBet.InexactFloat64(), chainWin.InexactFloat64())
-			d.SaveRecord(record)
-			zap.L().Info("Ug5Guess:注单信息",
-				zap.Uint32("agentId", req.AgentId),
-				zap.Uint32("playerId", req.UserId),
-				zap.Uint32("gameId", req.GameId),
-				zap.String("symbol", eGame.ConfName),
-				zap.String("roundId", req.RoundId),
-				zap.Any("record", record))
+	}
+	if req.Complete {
+		account := user.Account
+		record := ConvertRecord(req.AgentId, req.UserId, req.RoundId, req.CurrencyType, eGame.ConfName,
+			account, recordJSON, newCurrency, uint32(eAgent.WebId), chainBet.InexactFloat64(), chainWin.InexactFloat64(), user.IsTourist)
+		d.SaveRecord(record)
+		zap.L().Info("Ug5Guess:注单信息",
+			zap.Uint32("agentId", req.AgentId),
+			zap.Uint32("playerId", req.UserId),
+			zap.Uint32("gameId", req.GameId),
+			zap.String("symbol", eGame.ConfName),
+			zap.String("roundId", req.RoundId),
+			zap.Any("record", record))
+		if user.IsTourist == 0 {
 			dao.CacheIns().Complete(int64(req.AgentId), req.UserId, eGame.ConfName, chainBet.Mul(exchange), chainWin.Mul(exchange), pc.Pool[1].Revenue)
 		}
-		if poolChanged {
-			d.pcr.Record(int64(req.AgentId), eGame.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), eGame.ConfName))
-		}
+	}
+	if poolChanged && user.IsTourist == 0 {
+		d.pcr.Record(int64(req.AgentId), eGame.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), eGame.ConfName))
 	}
 
 	if code := d.applyGameStorageWrites(req.UserId, req.GameId, req.CurrencyType, req.GameStorage, req.DeleteGameStorageKeys); code != services.ErrorCode_OK {
