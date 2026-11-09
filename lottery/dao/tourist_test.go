@@ -1,12 +1,95 @@
 package dao
 
 import (
+	"app/config"
+	"app/esindex"
 	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/shopspring/decimal"
 )
+
+func TestTouristSkipsPoolControlsAndReads(t *testing.T) {
+	ctx, _ := poolTestRuntime(t)
+	if err := RedisIns().cli.HSet(ctx, "player_1", "isTourist", 1).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginPoolRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	// Any attempted pool read would now fail with WRONGTYPE.
+	if err := RedisIns().cli.Set(ctx, esindex.AgentEffectData(), "unreadable-pool", 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	bet, award := decimal.NewFromInt(10), decimal.NewFromInt(1000000)
+	if !CacheIns().CheckPoolWithChange(7, "a", "trial", "CNY", award, bet, decimal.NewFromInt(1), 1) {
+		t.Fatal("tourist was subjected to pool affordability control")
+	}
+	if !CacheIns().CheckPoolWithOutBet(7, "a", "trial", "CNY", award, decimal.Zero, decimal.Zero, 1) {
+		t.Fatal("tourist payout was subjected to pool balance control")
+	}
+	// A tourist must not dereference any pool control configuration either.
+	if _, ok := CacheIns().Lottery(7, 1, nil, "a", "CNY", bet, award, "trial", bet); !ok {
+		t.Fatal("tourist was subjected to lottery control")
+	}
+	CacheIns().Complete(7, 1, "a", bet, award, decimal.Zero)
+	if len(CacheIns().GetAgent(7).gameCache) != 0 || PoolRequestDirty(7) {
+		t.Fatal("tourist touched real pool state or player statistics")
+	}
+}
+
+func TestRealPlayerStillChecksPoolAffordability(t *testing.T) {
+	ctx, _ := poolTestRuntime(t)
+	if err := BeginPoolRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	award := decimal.NewFromInt(1000000)
+	if CacheIns().CheckPoolWithChange(7, "a", "real", "CNY", award, decimal.NewFromInt(10), decimal.Zero, 1) {
+		t.Fatal("real player bypassed pool affordability control")
+	}
+	if CacheIns().CheckPoolWithOutBet(7, "a", "real", "CNY", award, decimal.Zero, decimal.Zero, 1) {
+		t.Fatal("real player bypassed payout pool control")
+	}
+	pc := *config.CfgIns.GetPoolCfg(7, "a")
+	pc.Pool = map[int32]*config.PoolItem{1: {Base: decimal.Zero, Revenue: decimal.Zero}}
+	if _, ok := CacheIns().Lottery(7, 1, &pc, "a", "CNY", decimal.Zero, award, "real", decimal.Zero); ok {
+		t.Fatal("real player bypassed lottery control")
+	}
+}
+
+func TestLuck5TouristDoesNotReadPool(t *testing.T) {
+	ctx, _ := poolTestRuntime(t)
+	if err := RedisIns().cli.HSet(ctx, "player_1", "isTourist", 1, "currency", 10000).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginPoolRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if err := RedisIns().cli.Set(ctx, esindex.AgentEffectData(), "unreadable-pool", 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	deal := &Luck5Round{UserId: 1, AgentId: 7, GameId: 2, CurrencyType: "CNY", RoundId: "trial-no-pool", Symbol: "b", BetCent: 100, ReserveCent: 100000000, Exchange: decimal.NewFromInt(1), RevenueRate: decimal.RequireFromString("0.1")}
+	response, err := CacheIns().Luck5Deal(ctx, deal)
+	if err != nil || response == nil || !response.Ret {
+		t.Fatalf("tourist deal depended on real pool: %+v %v", response, err)
+	}
+	saved := false
+	settle := &Luck5Round{UserId: 1, AgentId: 7, GameId: 2, CurrencyType: "CNY", RoundId: deal.RoundId, WinCent: 100000000, RecordJson: "{}"}
+	response, err = CacheIns().Luck5Settle(ctx, settle, func(round *Luck5Round) error {
+		saved = true
+		if round.IsTourist != 1 {
+			t.Fatal("tourist record lost its flag")
+		}
+		return nil
+	})
+	if err != nil || response == nil || !response.Ret || !saved {
+		t.Fatalf("tourist settlement depended on real pool: %+v %v", response, err)
+	}
+	if len(CacheIns().GetAgent(7).gameCache) != 0 || PoolRequestDirty(7) {
+		t.Fatal("Luck5 tourist changed real pool state")
+	}
+}
 
 func TestTouristPoolAccrualExcluded(t *testing.T) {
 	ctx, lease := poolTestRuntime(t)

@@ -333,8 +333,11 @@ func (gcm *GameCacheMgr) Complete(agentId int64, userId uint32, symbol string, b
 	//细分代理锁
 	agent.lock.Lock()
 	defer agent.lock.Unlock()
-	game := agent.GetGame(symbol)
 	user := agent.GetUser(uint32(userId))
+	if user.IsTourist != 0 {
+		return
+	}
+	game := agent.GetGame(symbol)
 	if user.IsTourist == 0 {
 		chips := award
 		//不会有返奖的情况，直接用bet计算税收
@@ -472,6 +475,10 @@ func (gcm *GameCacheMgr) CheckPoolWithChange(agentId int64, symbol, recordId, cu
 	//细分代理锁
 	agent.lock.Lock()
 	defer agent.lock.Unlock()
+	user := agent.GetUser(uint32(userId))
+	if user.IsTourist != 0 {
+		return true
+	}
 	game := agent.GetGame(symbol)
 	//水池计算方式  pool = 有效投注 - 总赔付 - 税收 + Base；预判只扣正赔付。
 	// 与本地 fruitsRpcDev.pool.settle 对齐：next = 当前池 + bet - win，仅 next<0 才拒绝。
@@ -481,7 +488,6 @@ func (gcm *GameCacheMgr) CheckPoolWithChange(agentId int64, symbol, recordId, cu
 	if payout.GreaterThan(bet) && pool.LessThan(decimal.Zero) {
 		return false
 	}
-	user := agent.GetUser(uint32(userId))
 	if user.IsTourist == 0 {
 		before := poolWithBase(game, agentId, symbol)
 		addGamePayout(game, award)
@@ -506,6 +512,10 @@ func (gcm *GameCacheMgr) CheckPoolWithOutBet(agentId int64, symbol, recordId, cu
 	//细分代理锁
 	agent.lock.Lock()
 	defer agent.lock.Unlock()
+	user := agent.GetUser(uint32(userId))
+	if user.IsTourist != 0 {
+		return true
+	}
 	game := agent.GetGame(symbol)
 	//水池计算方式  pool = 有效投注 - 总赔付 - 税收 + Base
 	pool := poolWithBase(game, agentId, symbol)
@@ -513,7 +523,6 @@ func (gcm *GameCacheMgr) CheckPoolWithOutBet(agentId int64, symbol, recordId, cu
 	if payout.GreaterThan(decimal.Zero) && pool.LessThan(payout) {
 		return false
 	}
-	user := agent.GetUser(uint32(userId))
 	if user.IsTourist == 0 {
 		before := poolWithBase(game, agentId, symbol)
 		addGamePayout(game, award)
@@ -611,6 +620,9 @@ func (gcm *GameCacheMgr) FinishRoundData(agentId int64, roundId string) *RoundIt
 	agent.lock.Lock()
 	defer agent.lock.Unlock()
 	user := agent.GetUser(uint32(userId))
+	if user.IsTourist != 0 {
+		return decimal.Zero, true
+	}
 	game := agent.GetGame(symbol)
 	revence := bet.Mul(pc.Pool[1].Revenue).Truncate(4)
 	pool := (bet.Add(game.TotalEffectBet).Sub(game.TotalProfLoss)).Sub(game.TotalRevenue.Add(revence)).Add(pc.Pool[1].Base)

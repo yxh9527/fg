@@ -22,6 +22,41 @@ type poolRequestIdentity interface {
 	GetGameId() uint32
 }
 
+func poolRequestPlayerIDs(req interface{}) []uint32 {
+	if batch, ok := req.(*services.FruitSettleRoundReq); ok {
+		ids := make([]uint32, 0, len(batch.Players))
+		for _, player := range batch.Players {
+			if player == nil || player.UserId == 0 {
+				return nil
+			}
+			ids = append(ids, player.UserId)
+		}
+		return ids
+	}
+	if player, ok := req.(interface{ GetUserId() uint32 }); ok && player.GetUserId() != 0 {
+		return []uint32{player.GetUserId()}
+	}
+	return nil
+}
+
+func touristOnlyPoolRequest(req interface{}) (bool, error) {
+	ids := poolRequestPlayerIDs(req)
+	if len(ids) == 0 {
+		return false, nil
+	}
+	onlyTourists := true
+	for _, id := range ids {
+		_, _, _, _, kind, err := dao.RedisIns().GetUserStatDataChecked(id)
+		if err != nil {
+			return false, err
+		}
+		if kind == 0 {
+			onlyTourists = false
+		}
+	}
+	return onlyTourists, nil
+}
+
 // Pool requests only refresh group routing and persist existing counters.
 // No auxiliary session, inflight, reset-round or seen records are created.
 func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (response interface{}, err error) {
@@ -40,10 +75,14 @@ func poolGroupInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 		return nil, status.Error(codes.Unavailable, "水池正忙，请重试")
 	}
 	defer lease.Close()
+	touristOnly, err := touristOnlyPoolRequest(req)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "读取玩家身份失败")
+	}
 	if err = dao.BeginPoolRequest(ctx, agentID); err != nil {
 		return nil, status.Error(codes.Unavailable, err.Error())
 	}
-	if game := dao.GamesManagerIns().GetById(int64(identity.GetGameId())); game != nil {
+	if game := dao.GamesManagerIns().GetById(int64(identity.GetGameId())); game != nil && !touristOnly {
 		if err = dao.PoolGroupStore().CheckInitialization(ctx, agentID, game.ConfName); err != nil {
 			return nil, status.Error(codes.Unavailable, err.Error())
 		}

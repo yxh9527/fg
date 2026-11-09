@@ -389,7 +389,8 @@ func (d *LotteryService) updatePlayerCurrency(id uint32, delta int64) (int64, se
 }
 
 func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, req *slotsLotteryReq) (int64, bool, services.ErrorCode) {
-	if dao.CacheIns().GetUser(req.AgentId, int64(req.PlayerId)) == nil {
+	user := dao.CacheIns().GetUser(req.AgentId, int64(req.PlayerId))
+	if user == nil {
 		return 0, false, services.ErrorCode_SYSTEM_ERROR
 	}
 	var newCurrency int64
@@ -429,7 +430,7 @@ func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, req *s
 		zap.Any("awardMax", awardMax),
 		zap.Any("currenType", req.CurrencyType))
 	reserved := false
-	if exReservedAward.GreaterThan(decimal.Zero) {
+	if user.IsTourist == 0 && exReservedAward.GreaterThan(decimal.Zero) {
 		avgBet := decimal.Zero
 		if req.AverageBet > 0 {
 			avgBet = decimal.NewFromFloat(req.AverageBet).Mul(exchange)
@@ -470,13 +471,15 @@ func (d *LotteryService) SlotsBet(webId uint32, exchange decimal.Decimal, req *s
 		}
 	}
 	nc := decimal.NewFromInt(newCurrency).Div(decimal.NewFromInt(100))
-	if !reserved {
+	if !reserved && user.IsTourist == 0 {
 		dao.CacheIns().ChangePool(int64(req.AgentId), int32(req.PlayerId), eGame.ConfName, req.CurrencyType, req.RoundID, exBet, exAward, pc.Pool[1].Revenue)
 	}
 	if bet.GreaterThan(decimal.Zero) {
 		d.SaveBill(uint32(req.AgentId), req.PlayerId, bet.Neg(), decimal.Zero, nc.Truncate(2).InexactFloat64(), eGame.ConfName, "下注", req.CurrencyType, req.RoundID)
 	}
-	d.pcr.Record(int64(req.AgentId), eGame.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), eGame.ConfName))
+	if user.IsTourist == 0 {
+		d.pcr.Record(int64(req.AgentId), eGame.ConfName, dao.CacheIns().GetPool(int64(req.AgentId), eGame.ConfName))
+	}
 	zap.L().Debug("Bet:下注成功",
 		zap.Any("agentId", req.AgentId),
 		zap.Any("symbol", eGame.ConfName),
@@ -937,7 +940,7 @@ func (d *LotteryService) doSingleBet(req *singleBetReq) (resp *singleBetResp, er
 			}
 		}
 	}()
-	if !bet.IsZero() || !win.IsZero() {
+	if user.IsTourist == 0 && (!bet.IsZero() || !win.IsZero()) {
 		revenue := bet.Mul(exchange).Mul(pc.Pool[1].Revenue).Truncate(4)
 		if !dao.CacheIns().CheckPoolWithChange(int64(req.AgentId), game.ConfName, req.RoundID, req.CurrencyType,
 			win.Mul(exchange), bet.Mul(exchange), revenue, req.UserId) {

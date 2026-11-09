@@ -7,9 +7,34 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"micro_service/services"
+	"reflect"
 	"testing"
 	"time"
 )
+
+func TestPoolRequestPlayerIDs(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		req  interface{}
+		want []uint32
+	}{
+		{"single", &services.SlotsDoBetReq{UserId: 7}, []uint32{7}},
+		{"free", &services.SlotsDoBetFreeReq{UserId: 8}, []uint32{8}},
+		{"fruit", &services.FruitDoBetReq{UserId: 9}, []uint32{9}},
+		{"ug5", &services.Ug5GuessReq{UserId: 10}, []uint32{10}},
+		{"luck5", &services.Luck5DealReq{UserId: 11}, []uint32{11}},
+		{"batch", &services.FruitSettleRoundReq{Players: []*services.FruitSettlePlayer{{UserId: 1}, {UserId: 2}}}, []uint32{1, 2}},
+		{"invalid batch", &services.FruitSettleRoundReq{Players: []*services.FruitSettlePlayer{nil}}, nil},
+		{"invalid identity", &services.SlotsDoBetReq{}, nil},
+		{"no player", &services.PoolAmountResultReq{}, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := poolRequestPlayerIDs(tt.req); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("players = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestPoolHandlerPanicReturnsErrorForReconciliation(t *testing.T) {
 	_, err := callPoolHandler(context.Background(), nil, func(context.Context, interface{}) (interface{}, error) { panic("pool read failed") })

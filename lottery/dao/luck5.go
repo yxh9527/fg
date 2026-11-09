@@ -96,13 +96,16 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 	if round.PoolSymbol == "" {
 		round.PoolSymbol = round.Symbol
 	}
-	game := agent.getPoolGame(round.PoolSymbol)
 	user := agent.GetUser(round.UserId)
-	nextGame, nextUser := *game, *user
+	var game *Game
+	var nextGame Game
+	nextUser := *user
 	bet := luck5Amount(round.BetCent).Mul(round.Exchange)
 	win := luck5Amount(round.WinCent).Mul(round.Exchange)
 	reserve := luck5Amount(round.ReserveCent).Mul(round.Exchange)
 	if round.IsTourist == 0 {
+		game = agent.getPoolGame(round.PoolSymbol)
+		nextGame = *game
 		if settle {
 			nextGame.TotalProfLoss = nextGame.TotalProfLoss.Add(win.Sub(reserve))
 			nextGame.TotalChips = nextGame.TotalChips.Add(decimal.Max(bet, win))
@@ -170,10 +173,12 @@ func (rd *RedisDao) commitLuck5Funds(ctx context.Context, agent *AgentData, roun
 		delete(agent.userCache, round.UserId)
 		return code, err
 	}
-	nextGame.UpdateTime = time.Now().Unix()
-	nextUser.UpdateTime = nextGame.UpdateTime
-	*game = nextGame
-	*user = nextUser
+	if round.IsTourist == 0 {
+		nextGame.UpdateTime = time.Now().Unix()
+		nextUser.UpdateTime = nextGame.UpdateTime
+		*game = nextGame
+		*user = nextUser
+	}
 	return services.ErrorCode_OK, nil
 }
 
@@ -191,17 +196,20 @@ func (gcm *GameCacheMgr) Luck5Deal(ctx context.Context, request *Luck5Round) (re
 	if balance < request.BetCent {
 		return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_MONEY, CurrencyCent: balance, Error: "balanceInsufficient"}, nil
 	}
-	game := agent.GetGame(request.Symbol)
-	request.PoolSymbol = game.Symbol
-	request.PoolBase = poolCfgBase(agent.Id, request.Symbol)
 	user := agent.GetUser(request.UserId)
 	request.Account = user.Account
 	request.IsTourist = user.IsTourist
+	request.PoolSymbol = request.Symbol
 	bet := luck5Amount(request.BetCent).Mul(request.Exchange)
 	reserve := luck5Amount(request.ReserveCent).Mul(request.Exchange)
 	request.Revenue = bet.Mul(request.RevenueRate).Truncate(4)
-	if user.IsTourist == 0 && luck5DealPoolAfter(poolWithBase(game, agent.Id, request.Symbol), bet, request.Revenue).LessThan(reserve) {
-		return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, CurrencyCent: balance, Error: "poolInsufficient"}, nil
+	if user.IsTourist == 0 {
+		game := agent.GetGame(request.Symbol)
+		request.PoolSymbol = game.Symbol
+		request.PoolBase = poolCfgBase(agent.Id, request.Symbol)
+		if luck5DealPoolAfter(poolWithBase(game, agent.Id, request.Symbol), bet, request.Revenue).LessThan(reserve) {
+			return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, CurrencyCent: balance, Error: "poolInsufficient"}, nil
+		}
 	}
 	code, err := RedisIns().commitLuck5Funds(ctx, agent, request, false)
 	if err != nil {
@@ -235,15 +243,17 @@ func (gcm *GameCacheMgr) Luck5Settle(ctx context.Context, request *Luck5Round, s
 	if round.PoolSymbol == "" {
 		round.PoolSymbol = round.Symbol
 	}
-	game := agent.getPoolGame(round.PoolSymbol)
 	reserve := luck5Amount(round.ReserveCent).Mul(round.Exchange)
 	win := luck5Amount(round.WinCent).Mul(round.Exchange)
-	if round.IsTourist == 0 && !luck5CanSettle(poolRaw(game).Add(round.PoolBase), reserve, win) {
-		balance, readErr := RedisIns().GetPlayerCurrency(round.UserId)
-		if readErr != nil {
-			return nil, readErr
+	if round.IsTourist == 0 {
+		game := agent.getPoolGame(round.PoolSymbol)
+		if !luck5CanSettle(poolRaw(game).Add(round.PoolBase), reserve, win) {
+			balance, readErr := RedisIns().GetPlayerCurrency(round.UserId)
+			if readErr != nil {
+				return nil, readErr
+			}
+			return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, CurrencyCent: balance, Error: "poolInsufficient"}, nil
 		}
-		return &services.Luck5Resp{Code: services.ErrorCode_NO_ENOUGH_POOL_MONEY, CurrencyCent: balance, Error: "poolInsufficient"}, nil
 	}
 	code, err := RedisIns().commitLuck5Funds(ctx, agent, round, true)
 	if err != nil {

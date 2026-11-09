@@ -237,7 +237,7 @@ func (d *LotteryService) Ug5Guess(ctx context.Context, req *services.Ug5GuessReq
 		return failUg5Guess(resp, failCode, errName)
 	}
 
-	if !bet.IsZero() || !win.IsZero() {
+	if user.IsTourist == 0 && (!bet.IsZero() || !win.IsZero()) {
 		revenue := bet.Mul(exchange).Mul(pc.Pool[1].Revenue).Truncate(4)
 		if !dao.CacheIns().CheckPoolWithChange(int64(req.AgentId), eGame.ConfName, req.RoundId, req.CurrencyType,
 			win.Mul(exchange), bet.Mul(exchange), revenue, req.UserId) {
