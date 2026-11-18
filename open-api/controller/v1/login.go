@@ -89,6 +89,116 @@ func buildClientApiGameURL(baseURL, gamecode, lang string, userId int64, token s
 }
 
 // for test
+// func Login(ctx *gin.Context, params url.Values, agent *manager.Agent) {
+// 	account := params.Get("account")
+// 	nickName := params.Get("nickName")
+// 	ip := params.Get("ip")
+// 	money := params.Get("money")
+// 	symbol := params.Get("symbol") //这里把gameId等价于symbol 减少修改量
+// 	currencyType := params.Get("currencyType")
+// 	lang := params.Get("lang")
+// 	isTourist, _ := strconv.Atoi(params.Get("isTourist"))
+// 	if lang == "" {
+// 		lang = "zh"
+// 	}
+// 	game := GameCacheIns.GetGame(symbol)
+// 	if game == nil {
+// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_GAME_NOT)}))
+// 		zap.L().Error("游戏不存在", zap.Any("gameId", symbol))
+// 		return
+// 	}
+// 	if game.State != 1 {
+// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_GAME_PROHIBIT)}))
+// 		zap.L().Error("游戏维护中", zap.Any("gameId", symbol), zap.Any("state", game.State))
+// 		return
+// 	}
+// 	var userId int64 = 0
+// 	var pp *player.Player = nil
+// 	//查询玩家是否已经存在
+// 	player := Mysql().GetAgentPlayerInfoByAgentIdAndAcc(agent.Id, account)
+// 	if player == nil {
+// 		score, _ := strconv.ParseFloat(money, 64)
+// 		//新建玩家信息
+// 		player, pp = Mysql().AddNewPlayer(agent.Id, agent.WebId, score, account, nickName, ip, currencyType, int32(isTourist))
+// 		if player.Id <= 0 {
+// 			ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
+// 			return
+// 		}
+// 		userId = int64(player.Id)
+// 		p := ConvertUserEntityToHumanPlayer(pp)
+// 		if pe := Redis().SetPlayer(p); pe != nil {
+// 			zap.L().Warn("向redis写入玩家信息缓存失败", zap.Any("req", params), zap.Error(pe))
+// 			ctx.JSON(http.StatusOK, GetJsonObj(API_ADD_SCORE.String(), &SimpleResp{Code: int(CODE_UP_ACCOUNT_SCORE_ERR)}))
+// 			return
+// 		}
+// 		_, err := Redis().UpdatePlayerCurrency(uint32(pp.UserId), int64(100000*100))
+// 		if err != nil {
+// 			zap.L().Error("更新玩家游戏币和经验失败", zap.Any("req", params), zap.Error(err))
+// 			ctx.JSON(http.StatusOK, GetJsonObj(API_ADD_SCORE.String(), &SimpleResp{Code: int(CODE_UP_ACCOUNT_SCORE_ERR)}))
+// 			return
+// 		}
+// 	} else {
+// 		userId = int64(player.Id)
+// 		Update3rdParams(player.Id, currencyType)
+// 	}
+// 	aesKey, aesIv := agent.AesKey[16:], agent.AesKey[0:16]
+// 	source := fmt.Sprintf("agentId=%d&userId=%d&times=%d", agent.Id, userId, time.Now().UnixMilli())
+// 	res, _ := AesEncrypt(aesKey, aesIv, []byte(source))
+// 	sessionKey := fmt.Sprintf("SESSION@%s", res)
+// 	//创建用户session
+// 	session := &Session{}
+// 	sessionStr, _ := Redis().Get(sessionKey)
+// 	if sessionStr != "" {
+// 		if jsoniter.UnmarshalFromString(sessionStr, session) == nil {
+// 			session.GameId = int64(game.Number)
+// 			session.CurrencyType = currencyType
+// 			session.Lang = lang
+// 		}
+// 	} else {
+// 		session = &Session{
+// 			AgentId:      agent.Id,
+// 			UserId:       player.Id,
+// 			GameId:       int64(game.Number),
+// 			NickName:     player.NickName,
+// 			AuthToken:    res,
+// 			Mgckey:       sessionKey,
+// 			Lang:         lang,
+// 			Account:      player.UserId,
+// 			LastAuthTime: time.Now().Unix(),
+// 			AuthCount:    0,
+// 			CurrencyType: currencyType,
+// 			Symbol:       game.ConfName,
+// 			IsTourist:    int32(isTourist),
+// 		}
+// 	}
+// 	session.LastAuthTime = time.Now().Unix()
+// 	str, err := jsoniter.MarshalToString(session)
+// 	if err != nil {
+// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
+// 		return
+// 	}
+// 	if err := Redis().Set(sessionKey, str, 20*60); err != nil {
+// 		zap.L().Error("创建用户session失败", zap.Any("err", err))
+// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
+// 		return
+// 	}
+// 	arr := config.CfgIns.System.GameUrls
+// 	if len(arr) == 0 {
+// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
+// 		return
+// 	}
+// 	// GameUrls 配置为 clientApi 根地址，例如 http://172.21.211.216:9700
+// 	requestUrl := buildClientApiGameURL(
+// 		arr[rand.Intn(len(arr))],
+// 		game.ConfName,
+// 		lang,
+// 		player.Id,
+// 		session.Mgckey,
+// 	)
+// 	ctx.Redirect(http.StatusFound, requestUrl)
+// }
+
+// production
 func Login(ctx *gin.Context, params url.Values, agent *manager.Agent) {
 	account := params.Get("account")
 	nickName := params.Get("nickName")
@@ -113,28 +223,15 @@ func Login(ctx *gin.Context, params url.Values, agent *manager.Agent) {
 		return
 	}
 	var userId int64 = 0
-	var pp *player.Player = nil
 	//查询玩家是否已经存在
 	player := Mysql().GetAgentPlayerInfoByAgentIdAndAcc(agent.Id, account)
 	if player == nil {
 		score, _ := strconv.ParseFloat(money, 64)
 		//新建玩家信息
-		player, pp = Mysql().AddNewPlayer(agent.Id, agent.WebId, score, account, nickName, ip, currencyType, int32(isTourist))
+		player, _ = Mysql().AddNewPlayer(agent.Id, agent.WebId, score, account, nickName, ip, currencyType, int32(isTourist))
 		if player.Id <= 0 {
+			zap.L().Error("参数错误", zap.Any("gameId", symbol), zap.Any("state", game.State))
 			ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
-			return
-		}
-		userId = int64(player.Id)
-		p := ConvertUserEntityToHumanPlayer(pp)
-		if pe := Redis().SetPlayer(p); pe != nil {
-			zap.L().Warn("向redis写入玩家信息缓存失败", zap.Any("req", params), zap.Error(pe))
-			ctx.JSON(http.StatusOK, GetJsonObj(API_ADD_SCORE.String(), &SimpleResp{Code: int(CODE_UP_ACCOUNT_SCORE_ERR)}))
-			return
-		}
-		_, err := Redis().UpdatePlayerCurrency(uint32(pp.UserId), int64(100000*100))
-		if err != nil {
-			zap.L().Error("更新玩家游戏币和经验失败", zap.Any("req", params), zap.Error(err))
-			ctx.JSON(http.StatusOK, GetJsonObj(API_ADD_SCORE.String(), &SimpleResp{Code: int(CODE_UP_ACCOUNT_SCORE_ERR)}))
 			return
 		}
 	} else {
@@ -195,103 +292,11 @@ func Login(ctx *gin.Context, params url.Values, agent *manager.Agent) {
 		player.Id,
 		session.Mgckey,
 	)
-	ctx.Redirect(http.StatusFound, requestUrl)
+	ctx.PureJSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &LoginResp{
+		Code: int(CODE_OK),
+		Url:  requestUrl,
+	}))
 }
-
-// production
-// func Login(ctx *gin.Context, params url.Values, agent *manager.Agent) {
-// 	account := params.Get("account")
-// 	// nickName := params.Get("nickName")
-// 	// ip := params.Get("ip")
-// 	// money := params.Get("money")
-// 	symbol := params.Get("symbol") //这里把gameId等价于symbol 减少修改量
-// 	currencyType := params.Get("currencyType")
-// 	lang := params.Get("lang")
-// 	isTourist, _ := strconv.Atoi(params.Get("isTourist"))
-// 	if lang == "" {
-// 		lang = "zh"
-// 	}
-// 	game := GameCacheIns.GetGame(symbol)
-// 	if game == nil {
-// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_GAME_NOT)}))
-// 		zap.L().Error("游戏不存在", zap.Any("gameId", symbol))
-// 		return
-// 	}
-// 	if game.State != 1 {
-// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_GAME_PROHIBIT)}))
-// 		zap.L().Error("游戏维护中", zap.Any("gameId", symbol), zap.Any("state", game.State))
-// 		return
-// 	}
-// 	var userId int64 = 0
-// 	//查询玩家是否已经存在
-// 	player := Mysql().GetAgentPlayerInfoByAgentIdAndAcc(agent.Id, account)
-// 	if player == nil {
-// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_ACCOUNT_NOT)}))
-// 		zap.L().Error("参数错误", zap.Any("gameId", symbol), zap.Any("state", game.State))
-// 		return
-// 	} else {
-// 		userId = int64(player.Id)
-// 		Update3rdParams(player.Id, currencyType)
-// 	}
-// 	aesKey, aesIv := agent.AesKey[16:], agent.AesKey[0:16]
-// 	source := fmt.Sprintf("agentId=%d&userId=%d&times=%d", agent.Id, userId, time.Now().UnixMilli())
-// 	res, _ := AesEncrypt(aesKey, aesIv, []byte(source))
-// 	sessionKey := fmt.Sprintf("SESSION@%s", res)
-// 	//创建用户session
-// 	session := &Session{}
-// 	sessionStr, _ := Redis().Get(sessionKey)
-// 	if sessionStr != "" {
-// 		if jsoniter.UnmarshalFromString(sessionStr, session) == nil {
-// 			session.GameId = int64(game.Number)
-// 			session.CurrencyType = currencyType
-// 			session.Lang = lang
-// 		}
-// 	} else {
-// 		session = &Session{
-// 			AgentId:      agent.Id,
-// 			UserId:       player.Id,
-// 			GameId:       int64(game.Number),
-// 			NickName:     player.NickName,
-// 			AuthToken:    res,
-// 			Mgckey:       sessionKey,
-// 			Lang:         lang,
-// 			Account:      player.UserId,
-// 			LastAuthTime: time.Now().Unix(),
-// 			AuthCount:    0,
-// 			CurrencyType: currencyType,
-// 			Symbol:       game.ConfName,
-// 			IsTourist:    int32(isTourist),
-// 		}
-// 	}
-// 	session.LastAuthTime = time.Now().Unix()
-// 	str, err := jsoniter.MarshalToString(session)
-// 	if err != nil {
-// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
-// 		return
-// 	}
-// 	if err := Redis().Set(sessionKey, str, 20*60); err != nil {
-// 		zap.L().Error("创建用户session失败", zap.Any("err", err))
-// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
-// 		return
-// 	}
-// 	arr := config.CfgIns.System.GameUrls
-// 	if len(arr) == 0 {
-// 		ctx.JSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &SimpleResp{Code: int(CODE_REQUEST_ERR)}))
-// 		return
-// 	}
-// 	// GameUrls 配置为 clientApi 根地址，例如 http://172.21.211.216:9700
-// 	requestUrl := buildClientApiGameURL(
-// 		arr[rand.Intn(len(arr))],
-// 		game.ConfName,
-// 		lang,
-// 		player.Id,
-// 		session.Mgckey,
-// 	)
-// 	ctx.PureJSON(http.StatusOK, GetJsonObj(API_LOGIN.String(), &LoginResp{
-// 		Code: int(CODE_OK),
-// 		Url:  requestUrl,
-// 	}))
-// }
 
 func UpdateCurrencyType(ctx *gin.Context, params url.Values, agent *manager.Agent) {
 	account := params.Get("account")
