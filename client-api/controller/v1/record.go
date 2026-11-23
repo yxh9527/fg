@@ -33,10 +33,11 @@ type recordPrincipal struct {
 }
 
 type listCachePayload struct {
-	List  []*dao.RecordItem `json:"list"`
-	Total int64             `json:"total"`
-	Page  int               `json:"page"`
-	Size  int               `json:"size"`
+	List    []*dao.RecordItem `json:"list"`
+	Total   int64             `json:"total"`
+	Summary dao.RecordSummary `json:"summary"`
+	Page    int               `json:"page"`
+	Size    int               `json:"size"`
 }
 
 func (h *RecordHandler) resolvePrincipal(c *gin.Context, token string, gameId uint32) (*recordPrincipal, bool) {
@@ -137,7 +138,7 @@ func (h *RecordHandler) ListRecords(c *gin.Context) {
 		symbol = h.GameMap.Symbol(principal.GameId)
 	}
 	err := h.Guard.Do(key, payload, func() (interface{}, error) {
-		items, total, qErr := dao.ES().ListRecords(dao.RecordListQuery{
+		result, qErr := dao.ES().ListRecords(dao.RecordListQuery{
 			UserId:   principal.UserId,
 			GameId:   principal.GameId,
 			Symbol:   symbol,
@@ -150,7 +151,7 @@ func (h *RecordHandler) ListRecords(c *gin.Context) {
 		if qErr != nil {
 			return nil, qErr
 		}
-		return &listCachePayload{List: items, Total: total, Page: page, Size: size}, nil
+		return &listCachePayload{List: result.List, Total: result.Total, Summary: result.Summary, Page: page, Size: size}, nil
 	})
 	if err != nil {
 		zap.L().Error("ListRecords failed", zap.Error(err))
@@ -158,10 +159,11 @@ func (h *RecordHandler) ListRecords(c *gin.Context) {
 		return
 	}
 	common.OK(c, gin.H{
-		"list":  payload.List,
-		"total": payload.Total,
-		"page":  payload.Page,
-		"size":  payload.Size,
+		"list":    payload.List,
+		"total":   payload.Total,
+		"summary": payload.Summary,
+		"page":    payload.Page,
+		"size":    payload.Size,
 	})
 }
 
@@ -249,7 +251,7 @@ func (h *RecordHandler) InternalListRecords(c *gin.Context) {
 		fmt.Sprintf("%d", size),
 	)
 	err := h.Guard.Do(key, payload, func() (interface{}, error) {
-		items, total, qErr := dao.ES().ListRecords(dao.RecordListQuery{
+		result, qErr := dao.ES().ListRecords(dao.RecordListQuery{
 			UserId:   userId,
 			GameId:   gameId,
 			Symbol:   symbol,
@@ -262,7 +264,7 @@ func (h *RecordHandler) InternalListRecords(c *gin.Context) {
 		if qErr != nil {
 			return nil, qErr
 		}
-		return &listCachePayload{List: items, Total: total, Page: page, Size: size}, nil
+		return &listCachePayload{List: result.List, Total: result.Total, Summary: result.Summary, Page: page, Size: size}, nil
 	})
 	if err != nil {
 		zap.L().Error("InternalListRecords failed", zap.Error(err))
@@ -270,10 +272,11 @@ func (h *RecordHandler) InternalListRecords(c *gin.Context) {
 		return
 	}
 	common.OK(c, gin.H{
-		"list":  payload.List,
-		"total": payload.Total,
-		"page":  payload.Page,
-		"size":  payload.Size,
+		"list":    payload.List,
+		"total":   payload.Total,
+		"summary": payload.Summary,
+		"page":    payload.Page,
+		"size":    payload.Size,
 	})
 }
 

@@ -52,6 +52,18 @@ type RecordListQuery struct {
 	Size     int
 }
 
+// RecordSummary 使用注单原币种金额，汇总全部匹配记录，不受分页限制。
+type RecordSummary struct {
+	Bet float64 `json:"bet"`
+	Win float64 `json:"win"`
+}
+
+type RecordListResult struct {
+	List    []*RecordItem `json:"list"`
+	Total   int64         `json:"total"`
+	Summary RecordSummary `json:"summary"`
+}
+
 func InitES(c *config.RunConfig) error {
 	if c == nil || len(c.Elastic.Host) == 0 {
 		return errors.New("elastic config missing")
@@ -98,13 +110,13 @@ func normalizePageSize(page, size int) (int, int) {
 	return page, size
 }
 
-// ListRecords 直连 ES 旧注单索引，不经过 data-center。
-func (d *ESDao) ListRecords(q RecordListQuery) ([]*RecordItem, int64, error) {
+// ListRecords 在同一次 ES 查询中返回当前页和筛选范围总计，不经过 data-center。
+func (d *ESDao) ListRecords(q RecordListQuery) (*RecordListResult, error) {
 	if d == nil || d.es == nil {
-		return nil, 0, errors.New("es not initialized")
+		return nil, errors.New("es not initialized")
 	}
 	if q.UserId == 0 {
-		return []*RecordItem{}, 0, nil
+		return &RecordListResult{List: []*RecordItem{}}, nil
 	}
 	page, size := normalizePageSize(q.Page, q.Size)
 	querys := make([]elastic.Query, 0, 8)
@@ -144,6 +156,8 @@ func (d *ESDao) ListRecords(q RecordListQuery) ([]*RecordItem, int64, error) {
 		Index(esindex.Settlement()).
 		FetchSourceContext(elastic.NewFetchSourceContext(true).Include(source...)).
 		Query(boolQuery).
+		Aggregation("totalBet", elastic.NewSumAggregation().Field("bet")).
+		Aggregation("totalWin", elastic.NewSumAggregation().Field("win")).
 		From(from).
 		Size(size).
 		Sort("playedDate", false).
@@ -151,7 +165,12 @@ func (d *ESDao) ListRecords(q RecordListQuery) ([]*RecordItem, int64, error) {
 		Do(context.Background())
 	if err != nil {
 		zap.L().Error("ListRecords failed", zap.Error(err))
-		return nil, 0, err
+		return nil, err
+	}
+	bet, betOK := resp.Aggregations.Sum("totalBet")
+	win, winOK := resp.Aggregations.Sum("totalWin")
+	if !betOK || bet == nil || bet.Value == nil || !winOK || win == nil || win.Value == nil {
+		return nil, errors.New("record summary missing")
 	}
 	total := int64(0)
 	if resp.Hits != nil && resp.Hits.TotalHits != nil {
@@ -164,7 +183,10 @@ func (d *ESDao) ListRecords(q RecordListQuery) ([]*RecordItem, int64, error) {
 		_ = json.Unmarshal(b, item)
 		out = append(out, item)
 	}
-	return out, total, nil
+	return &RecordListResult{
+		List: out, Total: total,
+		Summary: RecordSummary{Bet: *bet.Value, Win: *win.Value},
+	}, nil
 }
 
 // GetRecordDetail 必须匹配 recordId + userId + gameId。
