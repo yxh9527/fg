@@ -49,9 +49,30 @@ func RequestTimeout(d time.Duration) gin.HandlerFunc {
 	}
 }
 
+func RequestLog() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		started := time.Now()
+		c.Next()
+		fields := []zap.Field{
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("latency", time.Since(started)),
+			zap.String("clientIp", c.ClientIP()),
+		}
+		if code, ok := c.Get("apiCode"); ok {
+			if apiCode, valid := code.(int); valid {
+				fields = append(fields, zap.Int("apiCode", apiCode))
+			}
+		}
+		zap.L().Info("http request", fields...)
+	}
+}
+
 func NewRouter(deps RouterDeps) *gin.Engine {
 	engine := gin.New()
 	engine.Use(ginzap.RecoveryWithZap(zap.L(), true))
+	engine.Use(RequestLog())
 	engine.Use(Cors())
 	engine.Use(RequestTimeout(8 * time.Second))
 	engine.MaxMultipartMemory = 1 << 20

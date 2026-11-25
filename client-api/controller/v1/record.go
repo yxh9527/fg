@@ -43,6 +43,7 @@ type listCachePayload struct {
 func (h *RecordHandler) resolvePrincipal(c *gin.Context, token string, gameId uint32) (*recordPrincipal, bool) {
 	token = strings.TrimSpace(token)
 	if token == "" {
+		zap.L().Warn("record auth rejected", zap.String("path", c.Request.URL.Path), zap.String("reason", "token required"), zap.Uint32("gameId", gameId))
 		common.Unauthorized(c)
 		return nil, false
 	}
@@ -55,6 +56,7 @@ func (h *RecordHandler) resolvePrincipal(c *gin.Context, token string, gameId ui
 			return nil, fmt.Errorf("auth system error")
 		}
 		if auth.Unauthorized || !auth.Success || auth.UserId == 0 {
+			zap.L().Warn("record auth rejected", zap.String("path", c.Request.URL.Path), zap.String("reason", auth.Message), zap.Uint32("gameId", gameId), zap.Uint32("userId", auth.UserId))
 			return nil, errUnauthorized
 		}
 		out := &recordPrincipal{UserId: auth.UserId, GameId: gameId}
@@ -75,9 +77,11 @@ func (h *RecordHandler) resolvePrincipal(c *gin.Context, token string, gameId ui
 		return nil, false
 	}
 	if principal.UserId == 0 {
+		zap.L().Warn("record auth rejected", zap.String("path", c.Request.URL.Path), zap.String("reason", "empty principal userId"), zap.Uint32("gameId", gameId))
 		common.Unauthorized(c)
 		return nil, false
 	}
+	zap.L().Info("record auth succeeded", zap.String("path", c.Request.URL.Path), zap.Uint32("userId", principal.UserId), zap.Uint32("gameId", principal.GameId))
 	return principal, true
 }
 
@@ -334,7 +338,7 @@ type statementListCachePayload struct {
 }
 
 // InternalListStatements 服务端流水列表：读 ES fg_gp_flowing_water，需 X-Internal-Key。
-// 只返回 desc=返奖 的流水，并把 desc 统一改成「普通」给前端。
+// 返回返奖和结算流水，并把 desc 统一改成「普通」给前端。
 // startTime/endTime 支持毫秒或秒；底层 createTime 按秒过滤。
 func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 	userId64, _ := strconv.ParseUint(c.Query("userId"), 10, 32)
@@ -362,7 +366,7 @@ func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 	payload := &statementListCachePayload{}
 	key := cache.BuildKey(
 		"internalStatementList",
-		"awardOnly_v4",
+		"settlement_v5",
 		fmt.Sprintf("%d", userId),
 		fmt.Sprintf("%d", gameId),
 		currency,
@@ -386,7 +390,7 @@ func (h *RecordHandler) InternalListStatements(c *gin.Context) {
 		if qErr != nil {
 			return nil, qErr
 		}
-		// 只查返奖：类型展示「普通」。
+		// 返奖和结算统一展示为「普通」。
 		// bet/award 保持 ES 原值，供下游按公式计算交易前/后余额与收支。
 		for _, item := range items {
 			if item != nil {

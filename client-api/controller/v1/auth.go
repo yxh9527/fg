@@ -42,6 +42,7 @@ type authResultCache struct {
 func (h *AuthHandler) Authenticate(c *gin.Context) {
 	var req authenticateReq
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Token) == "" {
+		zap.L().Warn("Authenticate bad request", zap.String("path", c.Request.URL.Path), zap.Bool("jsonError", err != nil), zap.Bool("tokenMissing", strings.TrimSpace(req.Token) == ""))
 		common.Fail(c, http.StatusOK, common.CodeBadRequest, "参数错误")
 		return
 	}
@@ -68,9 +69,11 @@ func (h *AuthHandler) Authenticate(c *gin.Context) {
 		return
 	}
 	if payload.Unauthorized || !payload.Success {
+		zap.L().Warn("Authenticate rejected", zap.String("path", c.Request.URL.Path), zap.String("reason", payload.Message), zap.Uint32("gameId", req.GameId), zap.Uint32("entryUserId", req.EntryUserId))
 		common.Fail(c, http.StatusOK, common.CodeUnauthorized, firstNonEmpty(payload.Message, "未登录"))
 		return
 	}
+	zap.L().Info("Authenticate succeeded", zap.String("path", c.Request.URL.Path), zap.Uint32("userId", payload.UserId), zap.Uint32("gameId", payload.GameId), zap.Bool("isReEnter", payload.IsReEnter))
 	out := gin.H{
 		"success":      payload.Success,
 		"userId":       payload.UserId,

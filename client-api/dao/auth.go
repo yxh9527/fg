@@ -40,6 +40,7 @@ func Authenticate(token string, gameId, entryUserId uint32) *AuthResult {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		out.Message = "token required"
+		zap.L().Warn("client auth rejected", zap.String("reason", out.Message), zap.Uint32("gameId", gameId), zap.Uint32("entryUserId", entryUserId))
 		return out
 	}
 	rds := Redis()
@@ -47,6 +48,7 @@ func Authenticate(token string, gameId, entryUserId uint32) *AuthResult {
 		out.SystemError = true
 		out.Unauthorized = false
 		out.Message = "redis unavailable"
+		zap.L().Error("client auth unavailable", zap.String("reason", out.Message), zap.Uint32("gameId", gameId))
 		return out
 	}
 	session, key, err := rds.LoadSession(token)
@@ -54,24 +56,29 @@ func Authenticate(token string, gameId, entryUserId uint32) *AuthResult {
 		out.SystemError = true
 		out.Unauthorized = false
 		out.Message = "session unavailable"
+		zap.L().Error("client auth session load failed", zap.String("reason", out.Message), zap.Uint32("gameId", gameId), zap.Error(err))
 		return out
 	}
 	if session == nil || session.UserId <= 0 {
 		out.Message = "token invalid"
+		zap.L().Warn("client auth rejected", zap.String("reason", out.Message), zap.Uint32("gameId", gameId))
 		return out
 	}
 	if entryUserId > 0 && uint32(session.UserId) != entryUserId {
 		out.Message = "entry user mismatch"
+		zap.L().Warn("client auth rejected", zap.String("reason", out.Message), zap.Uint32("userId", uint32(session.UserId)), zap.Uint32("entryUserId", entryUserId), zap.Uint32("gameId", gameId))
 		return out
 	}
 	if gameId > 0 {
 		game := DB().GetGameByNumber(int64(gameId))
 		if game == nil || game.State != 1 {
 			out.Message = "game unavailable"
+			zap.L().Warn("client auth rejected", zap.String("reason", out.Message), zap.Uint32("userId", uint32(session.UserId)), zap.Uint32("gameId", gameId))
 			return out
 		}
 		if session.GameId > 0 && session.GameId != int64(gameId) && session.Symbol != "" && session.Symbol != game.ConfName {
 			out.Message = "game mismatch"
+			zap.L().Warn("client auth rejected", zap.String("reason", out.Message), zap.Uint32("userId", uint32(session.UserId)), zap.Uint32("requestedGameId", gameId), zap.Int64("sessionGameId", session.GameId))
 			return out
 		}
 		session.GameId = int64(gameId)

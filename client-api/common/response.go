@@ -23,10 +23,12 @@ type APIResponse struct {
 }
 
 func OK(c *gin.Context, data interface{}) {
+	c.Set("apiCode", CodeOK)
 	c.JSON(http.StatusOK, APIResponse{Code: CodeOK, Data: data})
 }
 
 func Fail(c *gin.Context, httpStatus, code int, msg string) {
+	c.Set("apiCode", code)
 	c.JSON(httpStatus, APIResponse{Code: code, Err: msg, Error: msg})
 }
 

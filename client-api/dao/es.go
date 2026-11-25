@@ -1,4 +1,4 @@
-﻿package dao
+package dao
 
 import (
 	"context"
@@ -239,8 +239,10 @@ func (d *ESDao) GetRecordDetail(recordId string, userId, gameId uint32, symbol s
 // CreateTime 为 Unix 秒（lottery 写入 now.Unix()），不是毫秒。
 //
 // 新约定（见 lottery/doc/流水字段变更清单.md）：
-//   bet   = 下注金额（负数；无下注为 0）
-//   award = 到账金额（>=0；无到账为 0）——返奖/结算/回退都写在 award，没有 win 字段
+//
+//	bet   = 下注金额（负数；无下注为 0）
+//	award = 到账金额（>=0；无到账为 0）——返奖/结算/回退都写在 award，没有 win 字段
+//
 // 旧数据可能没有 award：此时 bet 仍是账变 delta，读侧会归一化。
 type BillItem struct {
 	UserId         uint32  `json:"userId"`
@@ -311,7 +313,7 @@ type BillListQuery struct {
 	EndMs    int64
 	Page     int
 	Size     int
-	// OnlySettlement 为 true 时只查 desc=返奖 的流水。
+	// OnlySettlement 为 true 时只查返奖和结算流水，避免重复展示下注扣款。
 	OnlySettlement bool
 }
 
@@ -340,11 +342,14 @@ func (d *ESDao) ListBills(q BillListQuery) ([]*BillItem, int64, error) {
 		querys = append(querys, elastic.NewMatchPhraseQuery("currency", q.Currency))
 	}
 	if q.OnlySettlement {
-		// 玩家流水页只要 desc=返奖（兼容 text / keyword 映射）。
+		// Slot 写返奖，Fruit 写结算；两种完局流水都要查出，兼容 text / keyword 映射。
 		querys = append(querys, elastic.NewBoolQuery().Should(
 			elastic.NewTermQuery("desc.keyword", "返奖"),
 			elastic.NewTermQuery("desc", "返奖"),
 			elastic.NewMatchPhraseQuery("desc", "返奖"),
+			elastic.NewTermQuery("desc.keyword", "结算"),
+			elastic.NewTermQuery("desc", "结算"),
+			elastic.NewMatchPhraseQuery("desc", "结算"),
 		).MinimumNumberShouldMatch(1))
 	}
 	startSec := normalizeFlowCreateTime(q.StartMs)
@@ -383,7 +388,8 @@ func (d *ESDao) ListBills(q BillListQuery) ([]*BillItem, int64, error) {
 		item := &BillItem{}
 		_ = json.Unmarshal(b, item)
 		normalizeBillAmounts(b, item)
-		if q.OnlySettlement && strings.TrimSpace(item.Desc) != "返奖" {
+		desc := strings.TrimSpace(item.Desc)
+		if q.OnlySettlement && desc != "返奖" && desc != "结算" {
 			continue
 		}
 		out = append(out, item)
